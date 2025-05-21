@@ -1,21 +1,21 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
-  View, Text, FlatList, ActivityIndicator, StyleSheet, Modal,
-  Pressable, TouchableOpacity, Animated
+  View, Text, FlatList, ActivityIndicator, StyleSheet,
 } from 'react-native';
-import { Ionicons, MaterialIcons, FontAwesome5 } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { collection, getDocs, doc, getDoc } from 'firebase/firestore';
 import { db } from './firebase';
+import SidebarModal from './SidebarModal';
+import SidebarToggle from './SidebarToggle';
 
 const CombinedScheduleScreen = () => {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [menuVisible, setMenuVisible] = useState(false);
-  const slideAnim = useRef(new Animated.Value(-300)).current;
+  const [sidebarVisible, setSidebarVisible] = useState(false); // ✅ FIXED
+
   const navigation = useNavigation();
 
-  // Fetch user name by userId
+  // ✅ Fetch user name by userId
   const fetchUserName = async (userId) => {
     if (!userId) return 'Unknown';
     try {
@@ -30,6 +30,7 @@ const CombinedScheduleScreen = () => {
     return 'No Name';
   };
 
+  // ✅ Fetch Visit Schedule Data
   const fetchData = async () => {
     try {
       const visitsSnap = await getDocs(collection(db, 'Visit_Schedules'));
@@ -62,23 +63,7 @@ const CombinedScheduleScreen = () => {
     fetchData();
   }, []);
 
-  const openMenu = () => {
-    setMenuVisible(true);
-    Animated.timing(slideAnim, {
-      toValue: 0,
-      duration: 300,
-      useNativeDriver: true,
-    }).start();
-  };
-
-  const closeMenu = () => {
-    Animated.timing(slideAnim, {
-      toValue: -300,
-      duration: 300,
-      useNativeDriver: true,
-    }).start(() => setMenuVisible(false));
-  };
-
+  // ✅ Render each schedule card
   const renderItem = ({ item }) => (
     <View style={styles.card}>
       <Text style={styles.title}>Visit Schedule</Text>
@@ -87,16 +72,16 @@ const CombinedScheduleScreen = () => {
       <Text>Date: {item.visitDate.toLocaleDateString()}</Text>
       <Text>Notes: {item.visitNotes}</Text>
       <Text>Status: {item.status}</Text>
-      
     </View>
   );
 
   return (
     <View style={{ flex: 1 }}>
-      <TouchableOpacity onPress={openMenu} style={styles.menuButton}>
-        <Ionicons name="menu" size={30} color="#333" />
-      </TouchableOpacity>
+      {/* ✅ Sidebar Trigger */}
+      <SidebarToggle onOpen={() => setSidebarVisible(true)} />
+      <SidebarModal visible={sidebarVisible} onClose={() => setSidebarVisible(false)} />
 
+      {/* ✅ Loading or Data List */}
       {loading ? (
         <ActivityIndicator size="large" style={{ marginTop: 50 }} />
       ) : (
@@ -107,42 +92,6 @@ const CombinedScheduleScreen = () => {
           contentContainerStyle={styles.container}
         />
       )}
-
-      <Modal transparent={true} visible={menuVisible} animationType="none" onRequestClose={closeMenu}>
-        <Pressable style={styles.modalOverlay} onPress={closeMenu}>
-          <Animated.View style={[styles.sidebar, { transform: [{ translateX: slideAnim }] }]}>
-            <View style={styles.profileSection}>
-              <Text style={styles.profileName}>Pastor John</Text>
-              <Text style={styles.profileStatus}>Online</Text>
-            </View>
-
-            <TouchableOpacity style={styles.sidebarButton} onPress={() => { closeMenu(); navigation.navigate("ManagerUser"); }}>
-              <Ionicons name="person-outline" size={20} color="#555" />
-              <Text style={styles.sidebarItemText}>Manager User</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.sidebarButton} onPress={() => { closeMenu(); navigation.navigate("schedule"); }}>
-              <MaterialIcons name="schedule" size={20} color="#555" />
-              <Text style={styles.sidebarItemText}>Schedule of Manager</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.sidebarButton} onPress={() => { closeMenu(); navigation.navigate("booking"); }}>
-              <MaterialIcons name="event-available" size={20} color="#555" />
-              <Text style={styles.sidebarItemText}>Appointment Booking</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.sidebarButton} onPress={() => { closeMenu(); navigation.navigate("visit"); }}>
-              <FontAwesome5 name="calendar-check" size={18} color="#555" />
-              <Text style={styles.sidebarItemText}>Visit Schedule</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.sidebarButton} onPress={() => { closeMenu(); navigation.navigate("divition"); }}>
-              <Ionicons name="book-outline" size={20} color="#555" />
-              <Text style={styles.sidebarItemText}>Prayer & Devotion Tracker</Text>
-            </TouchableOpacity>
-          </Animated.View>
-        </Pressable>
-      </Modal>
     </View>
   );
 };
@@ -156,65 +105,12 @@ const styles = StyleSheet.create({
     padding: 16,
     borderRadius: 8,
     marginBottom: 16,
-    marginTop:100,
+    marginTop: 20,
   },
   title: {
     fontWeight: 'bold',
     fontSize: 18,
     marginBottom: 8,
-  },
-  smallText: {
-    color: '#555',
-    fontSize: 12,
-  },
-  menuButton: {
-    padding: 10,
-    position: 'absolute',
-    top: 40,
-    left: 10,
-    zIndex: 10,
-    backgroundColor: '#fff',
-    borderRadius: 8,
-    elevation: 5,
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.3)',
-    flexDirection: 'row',
-  },
-  sidebar: {
-    width: 250,
-    backgroundColor: '#fff',
-    padding: 16,
-    paddingTop: 60,
-    borderTopRightRadius: 10,
-    borderBottomRightRadius: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 3, height: 0 },
-    shadowOpacity: 0.3,
-    shadowRadius: 5,
-    elevation: 8,
-  },
-  profileSection: {
-    marginBottom: 30,
-  },
-  profileName: {
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  profileStatus: {
-    fontSize: 14,
-    color: 'green',
-  },
-  sidebarButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 12,
-  },
-  sidebarItemText: {
-    marginLeft: 10,
-    fontSize: 16,
-    color: '#333',
   },
 });
 

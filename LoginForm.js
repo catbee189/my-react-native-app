@@ -106,7 +106,7 @@ const LoginForm = ({ navigation }) => {
       showAlert('Success', `Welcome back, ${userData.name || email}!`);
 
       setTimeout(() => {
-navigation.navigate('dashboard', { user: userData });
+navigation.navigate('DashboardScreen', { user: userData });
       }, 1000);
 
     } catch (error) {

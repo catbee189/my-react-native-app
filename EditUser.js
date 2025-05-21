@@ -1,10 +1,20 @@
 // EditUser.js
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
-  View, Text, TextInput, StyleSheet, TouchableOpacity, Alert, ActivityIndicator, Platform,
+  View,
+  Text,
+  TextInput,
+  StyleSheet,
+  TouchableOpacity,
+  Alert,
+  ActivityIndicator,
+  Platform,
+  Animated,
 } from 'react-native';
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { db } from './firebase';
+import SidebarModal from './SidebarModal';
+import SidebarToggle from './SidebarToggle';
 
 export default function EditUser({ route, navigation }) {
   const { user } = route.params; // contains user.id
@@ -15,8 +25,10 @@ export default function EditUser({ route, navigation }) {
   const [phone, setPhone] = useState('');
   const [address, setAddress] = useState('');
   const [role, setRole] = useState('');
+  const [sidebarVisible, setSidebarVisible] = useState(false);
 
-  // Fetch the user data from Firebase
+  const slideAnim = useRef(new Animated.Value(-250)).current;
+
   useEffect(() => {
     const fetchUser = async () => {
       try {
@@ -47,33 +59,32 @@ export default function EditUser({ route, navigation }) {
   }, []);
 
   const handleUpdate = async () => {
-  try {
-    const userRef = doc(db, 'users', user.id);
-    await updateDoc(userRef, {
-      name,
-      email,
-      phone,
-      address,
-      role,
-    });
+    try {
+      const userRef = doc(db, 'users', user.id);
+      await updateDoc(userRef, {
+        name,
+        email,
+        phone,
+        address,
+        role,
+      });
 
-    if (Platform.OS === 'web') {
-      alert('User updated successfully');
-    } else {
-      Alert.alert('Success', 'User updated successfully');
+      if (Platform.OS === 'web') {
+        alert('User updated successfully');
+      } else {
+        Alert.alert('Success', 'User updated successfully');
+      }
+
+      if (route.params?.onUpdate) {
+        route.params.onUpdate();
+      }
+
+      navigation.goBack();
+    } catch (error) {
+      console.error('Update error:', error);
+      Alert.alert('Error', 'Failed to update user');
     }
-
-    // 🔁 Trigger the refresh callback if provided
-    if (route.params?.onUpdate) {
-      route.params.onUpdate();
-    }
-
-    navigation.goBack();
-  } catch (error) {
-    console.error('Update error:', error);
-    Alert.alert('Error', 'Failed to update user');
-  }
-};
+  };
 
   if (loading) {
     return (
@@ -86,6 +97,10 @@ export default function EditUser({ route, navigation }) {
 
   return (
     <View style={styles.container}>
+      {/* Sidebar Toggle and Modal */}
+      <SidebarToggle onOpen={() => setSidebarVisible(true)} />
+      <SidebarModal visible={sidebarVisible} onClose={() => setSidebarVisible(false)} />
+
       <Text style={styles.header}>Edit User</Text>
 
       <TextInput

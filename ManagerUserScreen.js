@@ -1,224 +1,240 @@
 import React, { useEffect, useState, useRef } from 'react';
 import {
-  View, Text, FlatList, StyleSheet, ActivityIndicator, TouchableOpacity,
-  Alert, Modal, Pressable, Animated, Platform
+  View,
+  Text,
+  FlatList,
+  StyleSheet,
+  ActivityIndicator,
+  TouchableOpacity,
+  Alert,
+  Modal,
+  TextInput,
+  Platform,
+  ScrollView,
+  Animated,
 } from 'react-native';
-import { collection, getDocs, deleteDoc, doc } from 'firebase/firestore';
+import { collection, getDocs, deleteDoc, doc, updateDoc } from 'firebase/firestore';
 import { db } from './firebase';
-import { Ionicons, MaterialIcons, FontAwesome5 } from '@expo/vector-icons';
+import { Ionicons } from '@expo/vector-icons';
+import SidebarModal from './SidebarModal'; // Sidebar with navigation links
+import SidebarToggle from './SidebarToggle'; // Menu icon to open sidebar
 
-export default function UserListScreen({ navigation }) {
+export default function UserListScreen() {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [menuVisible, setMenuVisible] = useState(false);
-  const slideAnim = useRef(new Animated.Value(-250)).current;
 
+  // Modal state and selected user for editing
+  const [editModalVisible, setEditModalVisible] = useState(false);
+  const [selectedUser, setSelectedUser] = useState(null);
+
+  // Form fields state for editing
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
+  const [address, setAddress] = useState('');
+  const [role, setRole] = useState('');
+
+  // Sidebar animation and visibility state
+  const slideAnim = useRef(new Animated.Value(-250)).current;
+  const [sidebarVisible, setSidebarVisible] = useState(false);
+
+  // Fetch users from Firestore
   const fetchUsers = async () => {
     try {
+      setLoading(true);
       const querySnapshot = await getDocs(collection(db, 'users'));
       const userList = [];
       querySnapshot.forEach((doc) => {
         userList.push({ id: doc.id, ...doc.data() });
       });
       setUsers(userList);
-      setLoading(false);
     } catch (error) {
       console.error('Error fetching users:', error);
+      Alert.alert('Error', 'Failed to fetch users');
+    } finally {
       setLoading(false);
     }
-  };
-const deleteUser = async (id) => {
-  if (Platform.OS === 'web') {
-    const confirm = window.confirm("Are you sure you want to delete this user?");
-    if (!confirm) return;
-  }
-
-  // Show mobile alert confirmation
-  if (Platform.OS !== 'web') {
-    Alert.alert('Confirm Delete', 'Are you sure you want to delete this user?', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: () => performDelete(id),
-      },
-    ]);
-  } else {
-    // Web directly perform delete after confirmation
-    performDelete(id);
-  }
-};
-
-const performDelete = async (id) => {
-  try {
-    setLoading(true);
-    await deleteDoc(doc(db, 'users', id));
-    
-    if (Platform.OS === 'web') {
-      alert('User deleted successfully');
-    } else {
-      Alert.alert('Success', 'User deleted successfully');
-    }
-
-    fetchUsers(); // refresh list
-  } catch (error) {
-    console.error('Error deleting user:', error);
-
-    if (Platform.OS === 'web') {
-      alert('Failed to delete user');
-    } else {
-      Alert.alert('Error', 'Failed to delete user');
-    }
-  } finally {
-    setLoading(false);
-  }
-};
-
-
-  const openMenu = () => {
-    setMenuVisible(true);
-    Animated.timing(slideAnim, {
-      toValue: 0,
-      duration: 300,
-      useNativeDriver: true,
-    }).start();
-  };
-
-  const closeMenu = () => {
-    Animated.timing(slideAnim, {
-      toValue: -250,
-      duration: 300,
-      useNativeDriver: true,
-    }).start(() => {
-      setMenuVisible(false);
-    });
   };
 
   useEffect(() => {
     fetchUsers();
   }, []);
 
-const renderItem = ({ item }) => {
-  // Check if the item has any meaningful data
-  const hasData = item.name || item.email || item.phone || item.address || item.role;
+  // Delete user function
+  const deleteUser = async (id) => {
+    if (Platform.OS === 'web') {
+      const confirm = window.confirm('Are you sure you want to delete this user?');
+      if (!confirm) return;
+      await performDelete(id);
+    } else {
+      Alert.alert('Confirm Delete', 'Are you sure you want to delete this user?', [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => performDelete(id),
+        },
+      ]);
+    }
+  };
 
-  return (
-    <View style={styles.card}>
-      <View style={styles.cardHeader}>
-        <Text style={styles.name}>{item.name || ''}</Text>
+  const performDelete = async (id) => {
+    try {
+      setLoading(true);
+      await deleteDoc(doc(db, 'users', id));
+      Alert.alert('Success', 'User deleted successfully');
+      fetchUsers();
+    } catch (error) {
+      console.error('Error deleting user:', error);
+      Alert.alert('Error', 'Failed to delete user');
+    } finally {
+      setLoading(false);
+    }
+  };
 
-        {/* Show Edit/Delete only if data exists */}
-        {hasData && (
-          <View style={styles.actions}>
-           <TouchableOpacity
-  onPress={() =>
-    navigation.navigate('EditUser', {
-      user: item,
-      onUpdate: () => fetchUsers(), // callback function to refresh
-    })
-  }
->
-  <Ionicons name="create-outline" size={20} color="#007bff" />
-</TouchableOpacity>
+  // Open edit modal and preload data
+  const openEditModal = (user) => {
+    setSelectedUser(user);
+    setName(user.name || '');
+    setEmail(user.email || '');
+    setPhone(user.phone || '');
+    setAddress(user.address || '');
+    setRole(user.role || '');
+    setEditModalVisible(true);
+  };
 
+  // Update user in Firestore
+  const updateUser = async () => {
+    if (!name.trim()) {
+      Alert.alert('Validation', 'Name cannot be empty');
+      return;
+    }
+    try {
+      setLoading(true);
+      const userRef = doc(db, 'users', selectedUser.id);
+      await updateDoc(userRef, {
+        name,
+        email,
+        phone,
+        address,
+        role,
+      });
+      Alert.alert('Success', 'User updated successfully');
+      setEditModalVisible(false);
+      fetchUsers();
+    } catch (error) {
+      console.error('Error updating user:', error);
+      Alert.alert('Error', 'Failed to update user');
+    } finally {
+      setLoading(false);
+    }
+  };
 
-            <TouchableOpacity onPress={() => deleteUser(item.id)} style={{ marginLeft: 15 }}>
-              <Ionicons name="trash-outline" size={20} color="#d9534f" />
-            </TouchableOpacity>
-          </View>
-        )}
-      </View>
+  // Render each user card
+  const renderItem = ({ item }) => {
+    const hasData = item.name || item.email || item.phone || item.address || item.role;
 
-      {/* Optional Fields */}
-      {item.role ? <Text style={styles.role}>Role: {item.role}</Text> : null}
-      {item.email ? <Text>Email: {item.email}</Text> : null}
-      {item.phone ? <Text>Phone: {item.phone}</Text> : null}
-      {item.address ? <Text>Address: {item.address}</Text> : null}
-    </View>
-  );
-};
+    return (
+      
+      <View style={styles.card}>
+       <SidebarToggle onOpen={() => setSidebarVisible(true)} />
+        <SidebarModal visible={sidebarVisible} onClose={() => setSidebarVisible(false)} />
 
+        {/* Sidebar toggle placed here if you want the menu button on each card */}
+        {/* Or move it outside FlatList for global header */}
+        
+        <View style={styles.cardHeader}>
+          <Text style={styles.name}>{item.name || ''}</Text>
 
-  return (
-    <>
-      <TouchableOpacity onPress={openMenu} style={styles.menuButton}>
-        <Ionicons name="menu" size={28} color="#333" />
-      </TouchableOpacity>
+          {hasData && (
+            <View style={styles.actions}>
+              <TouchableOpacity onPress={() => openEditModal(item)}>
+                <Ionicons name="create-outline" size={20} color="#007bff" />
+              </TouchableOpacity>
 
-      <View style={styles.container}>
-        <View style={styles.topRow}>
-          <Text style={styles.title}>User List</Text>
-       <TouchableOpacity
-  onPress={() => navigation.navigate('add', {
-    onAdd: () => fetchUsers(),
-  })}
->
-  <Text style={{ color: 'blue'   }}>Add User</Text>
-</TouchableOpacity>
-
-
+              <TouchableOpacity onPress={() => deleteUser(item.id)} style={{ marginLeft: 15 }}>
+                <Ionicons name="trash-outline" size={20} color="#d9534f" />
+              </TouchableOpacity>
+            </View>
+          )}
         </View>
 
-        {loading ? (
-          <ActivityIndicator size="large" color="#007bff" />
-        ) : (
-          <FlatList
-            data={users}
-            renderItem={renderItem}
-            keyExtractor={(item) => item.id}
-            contentContainerStyle={{ paddingBottom: 20 }}
-          />
-        )}
+        {item.role ? <Text style={styles.role}>Role: {item.role}</Text> : null}
+        {item.email ? <Text>Email: {item.email}</Text> : null}
+        {item.phone ? <Text>Phone: {item.phone}</Text> : null}
+        {item.address ? <Text>Address: {item.address}</Text> : null}
       </View>
+    );
+  };
 
-      {/* Sidebar Modal */}
-      <Modal transparent={true} visible={menuVisible} animationType="none" onRequestClose={closeMenu}>
-        <Pressable style={styles.modalOverlay} onPress={closeMenu}>
-          <Animated.View style={[styles.sidebar, { transform: [{ translateX: slideAnim }] }]}>
-            <View style={styles.profileSection}>
-              <View style={styles.profileRow}>
-                <Text style={styles.profileName}>Pastor John</Text>
-                <View style={styles.onlineBullet} />
+  return (
+    <View style={styles.container}>
+      {/* Global sidebar toggle button */}
+      
+      <Text style={styles.title}>User List</Text>
+
+      {loading ? (
+        <ActivityIndicator size="large" color="#007bff" />
+      ) : (
+        <FlatList
+          data={users}
+          renderItem={renderItem}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={{ paddingBottom: 20 }}
+        />
+      )}
+
+      {/* Edit User Modal */}
+      <Modal
+        visible={editModalVisible}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setEditModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <ScrollView>
+              <Text style={styles.modalTitle}>Edit User</Text>
+
+              <TextInput style={styles.input} placeholder="Name" value={name} onChangeText={setName} />
+              <TextInput
+                style={styles.input}
+                placeholder="Email"
+                keyboardType="email-address"
+                value={email}
+                onChangeText={setEmail}
+              />
+              <TextInput
+                style={styles.input}
+                placeholder="Phone"
+                keyboardType="phone-pad"
+                value={phone}
+                onChangeText={setPhone}
+              />
+              <TextInput style={styles.input} placeholder="Address" value={address} onChangeText={setAddress} />
+              <TextInput style={styles.input} placeholder="Role" value={role} onChangeText={setRole} />
+
+              <View style={styles.modalButtons}>
+                <TouchableOpacity
+                  style={[styles.modalButton, styles.cancelButton]}
+                  onPress={() => setEditModalVisible(false)}
+                >
+                  <Text style={styles.buttonText}>Cancel</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity style={[styles.modalButton, styles.saveButton]} onPress={updateUser}>
+                  <Text style={styles.buttonText}>Save</Text>
+                </TouchableOpacity>
               </View>
-              <Text style={styles.profileStatus}>Online</Text>
-            </View>
-
-            <TouchableOpacity style={styles.sidebarButton} onPress={() => { closeMenu(); navigation.navigate('ManagerUser'); }}>
-              <Ionicons name="person-outline" size={20} color="#555" style={styles.icon} />
-              <Text style={styles.sidebarItemText}>Manager User</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.sidebarButton} onPress={() => { closeMenu(); navigation.navigate('schedule'); }}>
-              <MaterialIcons name="schedule" size={20} color="#555" style={styles.icon} />
-              <Text style={styles.sidebarItemText}>Schedule of Manager</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.sidebarButton} onPress={() => { closeMenu(); navigation.navigate('booking'); }}>
-              <MaterialIcons name="event-available" size={20} color="#555" style={styles.icon} />
-              <Text style={styles.sidebarItemText}>Appointment Booking</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.sidebarButton} onPress={() => { closeMenu(); navigation.navigate('visit'); }}>
-              <FontAwesome5 name="calendar-check" size={18} color="#555" style={styles.icon} />
-              <Text style={styles.sidebarItemText}>Visit Schedule</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.sidebarButton} onPress={() => { closeMenu(); navigation.navigate('divition'); }}>
-              <Ionicons name="book-outline" size={20} color="#555" style={styles.icon} />
-              <Text style={styles.sidebarItemText}>Prayer & Devotion Tracker</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={[styles.sidebarButton, { marginTop: 20 }]} onPress={() => { closeMenu(); navigation.navigate('Login'); }}>
-              <MaterialIcons name="logout" size={20} color="#D9534F" style={styles.icon} />
-              <Text style={[styles.sidebarItemText, { color: '#D9534F' }]}>Logout</Text>
-            </TouchableOpacity>
-          </Animated.View>
-        </Pressable>
+            </ScrollView>
+          </View>
+        </View>
       </Modal>
-    </>
+    </View>
   );
 }
 
+// Styles
 const styles = StyleSheet.create({
   container: {
     paddingTop: 80,
@@ -226,28 +242,10 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#fff',
   },
-  topRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 20,
-  },
   title: {
     fontSize: 24,
     fontWeight: 'bold',
-  },
-  addButton: {
-    backgroundColor: '#007bff',
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 6,
-  },
-  addButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    marginLeft: 5,
+    marginBottom: 20,
   },
   card: {
     borderWidth: 1,
@@ -273,55 +271,51 @@ const styles = StyleSheet.create({
   actions: {
     flexDirection: 'row',
   },
-  menuButton: {
-    position: 'absolute',
-    top: 50,
-    left: 20,
-    zIndex: 999,
-  },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.3)',
-    flexDirection: 'row',
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    paddingHorizontal: 20,
   },
-  sidebar: {
-    width: 250,
-    backgroundColor: '#fff',
+  modalContent: {
+    backgroundColor: 'white',
+    borderRadius: 8,
     padding: 20,
-    paddingTop: 40,
+    maxHeight: '80%',
   },
-  profileSection: {
-    marginBottom: 30,
-  },
-  profileRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  profileName: {
-    fontSize: 18,
+  modalTitle: {
+    fontSize: 22,
     fontWeight: 'bold',
-    marginRight: 8,
+    marginBottom: 15,
+    textAlign: 'center',
   },
-  onlineBullet: {
-    width: 10,
-    height: 10,
-    backgroundColor: 'green',
-    borderRadius: 5,
+  input: {
+    borderWidth: 1,
+    borderColor: '#ccc',
+    borderRadius: 6,
+    paddingHorizontal: 10,
+    paddingVertical: Platform.OS === 'ios' ? 12 : 8,
+    marginBottom: 15,
   },
-  profileStatus: {
-    color: 'gray',
-    marginTop: 4,
-  },
-  sidebarButton: {
+  modalButtons: {
     flexDirection: 'row',
-    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  modalButton: {
+    flex: 1,
     paddingVertical: 12,
+    borderRadius: 6,
+    marginHorizontal: 5,
+    alignItems: 'center',
   },
-  sidebarItemText: {
-    fontSize: 16,
-    color: '#333',
+  cancelButton: {
+    backgroundColor: '#ccc',
   },
-  icon: {
-    marginRight: 10,
+  saveButton: {
+    backgroundColor: '#007bff',
+  },
+  buttonText: {
+    color: '#fff',
+    fontWeight: 'bold',
   },
 });

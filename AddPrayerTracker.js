@@ -23,7 +23,8 @@ import {
   serverTimestamp,
 } from "firebase/firestore";
 import { db } from "./firebase";
-
+import SidebarModal from './SidebarModal';
+import SidebarToggle from './SidebarToggle';
 import { Ionicons, MaterialIcons, FontAwesome5 } from "@expo/vector-icons";
 
 const SCREEN_WIDTH = 360;
@@ -49,6 +50,7 @@ export default function AddPrayerTracker({ navigation }) {
   // Sidebar modal state & animation
   const [menuVisible, setMenuVisible] = useState(false);
   const slideAnim = useRef(new Animated.Value(-SCREEN_WIDTH)).current;
+  const [sidebarVisible, setSidebarVisible] = useState(false);
 
   useEffect(() => {
     async function fetchPastors() {
@@ -125,9 +127,9 @@ export default function AddPrayerTracker({ navigation }) {
   return (
     <>
       {/* Menu button */}
-      <TouchableOpacity onPress={openMenu} style={styles.menuButton}>
-        <Ionicons name="menu" size={32} color="#444" />
-      </TouchableOpacity>
+     <SidebarToggle onOpen={() => setSidebarVisible(true)} />
+     <SidebarModal visible={sidebarVisible} onClose={() => setSidebarVisible(false)} />
+     
 
       <ScrollView contentContainerStyle={styles.container}>
         <Text style={styles.header}>Add Prayer & Devotion</Text>
@@ -204,124 +206,7 @@ export default function AddPrayerTracker({ navigation }) {
       </ScrollView>
 
       {/* Sidebar Modal */}
-      <Modal
-        transparent
-        visible={menuVisible}
-        animationType="none"
-        onRequestClose={closeMenu}
-      >
-        <Pressable style={styles.modalOverlay} onPress={closeMenu}>
-          <Animated.View
-            style={[styles.sidebar, { transform: [{ translateX: slideAnim }] }]}
-          >
-            <View style={styles.profileSection}>
-              <View style={styles.profileRow}>
-                <Text style={styles.profileName}>Pastor John</Text>
-                <View style={styles.onlineBullet} />
-              </View>
-              <Text style={styles.profileStatus}>Online</Text>
-            </View>
-
-            <TouchableOpacity
-              style={styles.sidebarButton}
-              onPress={() => {
-                closeMenu();
-                navigation.navigate("ManagerUser");
-              }}
-            >
-              <Ionicons
-                name="person-outline"
-                size={20}
-                color="#555"
-                style={styles.icon}
-              />
-              <Text style={styles.sidebarItemText}>Manager User</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.sidebarButton}
-              onPress={() => {
-                closeMenu();
-                navigation.navigate("schedule");
-              }}
-            >
-              <MaterialIcons
-                name="schedule"
-                size={20}
-                color="#555"
-                style={styles.icon}
-              />
-              <Text style={styles.sidebarItemText}>Schedule of Manager</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.sidebarButton}
-              onPress={() => {
-                closeMenu();
-                navigation.navigate("booking");
-              }}
-            >
-              <MaterialIcons
-                name="event-available"
-                size={20}
-                color="#555"
-                style={styles.icon}
-              />
-              <Text style={styles.sidebarItemText}>Appointment Booking</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.sidebarButton}
-              onPress={() => {
-                closeMenu();
-                navigation.navigate("visit");
-              }}
-            >
-              <FontAwesome5
-                name="calendar-check"
-                size={18}
-                color="#555"
-                style={styles.icon}
-              />
-              <Text style={styles.sidebarItemText}>Visit Schedule</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.sidebarButton}
-              onPress={() => {
-                closeMenu();
-                navigation.navigate("divition");
-              }}
-            >
-              <Ionicons
-                name="book-outline"
-                size={20}
-                color="#555"
-                style={styles.icon}
-              />
-              <Text style={styles.sidebarItemText}>Prayer & Devotion Tracker</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.sidebarButton, { marginTop: 20 }]}
-              onPress={() => {
-                closeMenu();
-                navigation.navigate("Login");
-              }}
-            >
-              <MaterialIcons
-                name="logout"
-                size={20}
-                color="#D9534F"
-                style={styles.icon}
-              />
-              <Text style={[styles.sidebarItemText, { color: "#D9534F" }]}>
-                Logout
-              </Text>
-            </TouchableOpacity>
-          </Animated.View>
-        </Pressable>
-      </Modal>
+    
     </>
   );
 }

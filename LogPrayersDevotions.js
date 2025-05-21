@@ -1,27 +1,52 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import {
   View,
   Text,
   FlatList,
   ActivityIndicator,
   StyleSheet,
-  ScrollView,
+  Animated,
 } from "react-native";
-import { collection, getDocs, query, orderBy } from "firebase/firestore";
-import { db } from "./firebase"; // Your Firebase config file
 
-export default function PrayerDevotionLogs() {
+import { collection, getDocs, query, orderBy, where, doc, getDoc } from "firebase/firestore";
+import { db } from "./firebase"; // Your Firebase config file
+import SidebarModal from './SidebarModal';
+import SidebarToggle from './SidebarToggle';
+
+export default function PrayerDevotionLogs({ route }) {
+  // Get logged in user info from route params, fallback to guest
+  const user = route?.params?.user || { id: null, name: "Guest", role: "N/A" };
+
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // Fetch prayer devotion logs
+  // Sidebar states
+  const slideAnim = useRef(new Animated.Value(-250)).current;
+  const [sidebarVisible, setSidebarVisible] = useState(false);
+
   useEffect(() => {
     async function fetchLogs() {
+      setLoading(true);
+
       try {
         const logsCol = collection(db, "prayer_devotion_tracker");
-        // Fetch logs ordered by created_at desc (latest first)
-        const q = query(logsCol, orderBy("created_at", "desc"));
-        const snapshot = await getDocs(q);
+
+        let logsQuery;
+
+        if (user.role === "member") {
+          // Admin sees all logs
+          logsQuery = query(logsCol, orderBy("created_at", "desc"));
+        } else if (user.id) {
+          // Non-admin sees only their logs
+          logsQuery = query(logsCol, where("user_id", "==", user.id), orderBy("created_at", "desc"));
+        } else {
+          // Guest or no ID — no logs to show
+          setLogs([]);
+          setLoading(false);
+          return;
+        }
+
+        const snapshot = await getDocs(logsQuery);
 
         // Map logs to array
         const logsArray = snapshot.docs.map((doc) => ({
@@ -29,26 +54,30 @@ export default function PrayerDevotionLogs() {
           ...doc.data(),
         }));
 
-        // Now fetch user names for each log by user_id
-        // To optimize, you could batch fetch all users involved, but here we'll fetch individually for clarity
-        const usersCol = collection(db, "users");
+        // Fetch user names for logs (to show in UI), 
+        // but for non-admins who only see their own logs, we can skip this.
+        // Let's do it anyway, showing "Unknown" if missing.
 
         const logsWithUserNames = await Promise.all(
           logsArray.map(async (log) => {
             if (!log.user_id) return { ...log, userName: "Unknown" };
-            // Fetch user doc for this user_id
-            const userDoc = await getDocs(
-              query(usersCol, orderBy("__name__")) // Fallback in case you want order
-            );
 
-            // Alternatively, fetch single user doc by ID:
-            // But Firestore JS SDK v9+ doesn't provide getDoc by string query easily here,
-            // so simplest way is to fetch user doc by ID:
-            const userRef = doc(db, "users", log.user_id);
-            const userSnap = await getDoc(userRef);
-            if (userSnap.exists()) {
-              return { ...log, userName: userSnap.data().name || "No Name" };
-            } else {
+            // Optimization: If the log user_id === current user.id, use current user's name
+            if (log.user_id === user.id) {
+              return { ...log, userName: user.name || "You" };
+            }
+
+            // Otherwise fetch user doc by ID
+            try {
+              const userRef = doc(db, "users", log.user_id);
+              const userSnap = await getDoc(userRef);
+
+              if (userSnap.exists()) {
+                return { ...log, userName: userSnap.data().name || "No Name" };
+              } else {
+                return { ...log, userName: "Unknown User" };
+              }
+            } catch {
               return { ...log, userName: "Unknown User" };
             }
           })
@@ -57,17 +86,20 @@ export default function PrayerDevotionLogs() {
         setLogs(logsWithUserNames);
       } catch (error) {
         console.error("Error fetching prayer logs:", error);
+        setLogs([]);
       } finally {
         setLoading(false);
       }
     }
 
     fetchLogs();
-  }, []);
+  }, [user]);
 
   if (loading) {
     return (
       <View style={styles.center}>
+        <SidebarToggle onOpen={() => setSidebarVisible(true)} />
+        <SidebarModal visible={sidebarVisible} onClose={() => setSidebarVisible(false)} />
         <ActivityIndicator size="large" color="#007aff" />
       </View>
     );
@@ -76,35 +108,41 @@ export default function PrayerDevotionLogs() {
   if (logs.length === 0) {
     return (
       <View style={styles.center}>
+        <SidebarToggle onOpen={() => setSidebarVisible(true)} />
+        <SidebarModal visible={sidebarVisible} onClose={() => setSidebarVisible(false)} />
         <Text>No prayer & devotion logs found.</Text>
       </View>
     );
   }
 
-  const renderItem = ({ item }) => (
-    <View style={styles.logItem}>
-      <Text style={styles.logUserName}>{item.userName}</Text>
-      <Text style={styles.logDate}>
-        Date: {item.date || "N/A"}
-      </Text>
-      <Text style={styles.logLabel}>Devotion:</Text>
-      <Text style={styles.logText}>{item.devotion_text || "No devotion text"}</Text>
-      <Text style={styles.logLabel}>Prayer:</Text>
-      <Text style={styles.logText}>{item.prayer_text || "No prayer text"}</Text>
-    </View>
-  );
+  const renderItem = ({ item }) => {
+    return (
+      <View style={styles.logItem}>
+        <Text style={styles.logUserName}>{item.userName}</Text>
+        <Text style={styles.logDate}>
+          Date: {item.created_at ? new Date(item.created_at.seconds * 1000).toLocaleString() : "N/A"}
+        </Text>
+        <Text style={styles.logLabel}>Devotion:</Text>
+        <Text style={styles.logText}>{item.devotion_text || "No devotion text"}</Text>
+        <Text style={styles.logLabel}>Prayer:</Text>
+        <Text style={styles.logText}>{item.prayer_text || "No prayer text"}</Text>
+      </View>
+    );
+  };
 
   return (
-    <FlatList
-      data={logs}
-      keyExtractor={(item) => item.id}
-      renderItem={renderItem}
-      contentContainerStyle={styles.listContainer}
-    />
+    <View style={{ flex: 1 }}>
+      <SidebarToggle onOpen={() => setSidebarVisible(true)} />
+      <SidebarModal visible={sidebarVisible} onClose={() => setSidebarVisible(false)} />
+      <FlatList
+        data={logs}
+        keyExtractor={(item) => item.id}
+        renderItem={renderItem}
+        contentContainerStyle={styles.listContainer}
+      />
+    </View>
   );
 }
-
-import { doc, getDoc } from "firebase/firestore";
 
 const styles = StyleSheet.create({
   center: {
@@ -115,6 +153,7 @@ const styles = StyleSheet.create({
   listContainer: {
     padding: 20,
     backgroundColor: "#f9f9f9",
+    paddingBottom: 30,
   },
   logItem: {
     backgroundColor: "#fff",

@@ -1,33 +1,26 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
   StyleSheet,
-  TouchableOpacity,
   ScrollView,
-  Modal,
-  Pressable,
-  Animated,
   Dimensions,
+  ActivityIndicator,
+  TouchableOpacity,
+  Alert,
 } from 'react-native';
-import { Ionicons, MaterialIcons, FontAwesome5 } from '@expo/vector-icons';
-import { db } from './firebase'; // Adjust the path as needed
-import {
-  collection,
-  getDocs,
-  query,
-  where,
-} from 'firebase/firestore';
+import { FontAwesome5, Ionicons, MaterialIcons } from '@expo/vector-icons';
+import { PieChart, BarChart } from 'react-native-chart-kit';
+import { db } from './firebase';
+import { collection, getDocs } from 'firebase/firestore';
+import SidebarModal from './SidebarModal';
+import SidebarToggle from './SidebarToggle';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 
 const DashboardScreen = ({ navigation, route }) => {
   const user = route.params?.user || { name: 'Guest', role: 'N/A' };
-
-  const [menuVisible, setMenuVisible] = useState(false);
-  const slideAnim = useRef(new Animated.Value(-SCREEN_WIDTH * 0.7)).current;
-
-  // State for counts from Firestore
+  const [sidebarVisible, setSidebarVisible] = useState(false);
   const [counts, setCounts] = useState({
     totalUsers: 0,
     scheduleOfManager: 0,
@@ -36,22 +29,21 @@ const DashboardScreen = ({ navigation, route }) => {
     prayerTracker: 0,
   });
 
-  // Function to count documents in a collection
-  const getCount = async (collectionName, condition = null) => {
+  const [scheduleData, setScheduleData] = useState([]);
+  const [loadingSchedules, setLoadingSchedules] = useState(true);
+
+  // Helper to get counts from Firestore
+  const getCount = async (collectionName) => {
     try {
-      let q = collection(db, collectionName);
-      if (condition) {
-        q = query(q, where(...condition)); // condition example: ['status', '==', 'active']
-      }
-      const snapshot = await getDocs(q);
+      const snapshot = await getDocs(collection(db, collectionName));
       return snapshot.size;
     } catch (error) {
-      console.error("Error fetching count for", collectionName, error);
+      console.error(`Error getting ${collectionName}`, error);
       return 0;
     }
   };
 
-  // Fetch all counts on component mount
+  // Fetch counts on mount
   useEffect(() => {
     const fetchCounts = async () => {
       const [
@@ -67,7 +59,6 @@ const DashboardScreen = ({ navigation, route }) => {
         getCount('Visit_Schedules'),
         getCount('prayer_devotion_tracker'),
       ]);
-
       setCounts({
         totalUsers,
         scheduleOfManager,
@@ -76,349 +67,260 @@ const DashboardScreen = ({ navigation, route }) => {
         prayerTracker,
       });
     };
-
     fetchCounts();
   }, []);
 
-  const openMenu = () => {
-    setMenuVisible(true);
-    Animated.timing(slideAnim, {
-      toValue: 0,
-      duration: 300,
-      useNativeDriver: true,
-    }).start();
-  };
+  // Fetch schedule details for Bar Chart
+  useEffect(() => {
+    const fetchSchedules = async () => {
+      try {
+        const snapshot = await getDocs(collection(db, 'schedules'));
+        const schedules = snapshot.docs.map(doc => {
+          const data = doc.data();
+          return {
+            id: doc.id,
+            title: data.title || 'No Title',
+            start_date: data.start_date?.toDate ? data.start_date.toDate() : new Date(data.start_date),
+            end_date: data.end_date?.toDate ? data.end_date.toDate() : new Date(data.end_date),
+          };
+        });
+        setScheduleData(schedules);
+      } catch (error) {
+        console.error('Error fetching schedules', error);
+      } finally {
+        setLoadingSchedules(false);
+      }
+    };
+    fetchSchedules();
+  }, []);
 
-  const closeMenu = () => {
-    Animated.timing(slideAnim, {
-      toValue: -SCREEN_WIDTH * 0.7,
-      duration: 300,
-      useNativeDriver: true,
-    }).start(() => {
-      setMenuVisible(false);
-    });
-  };
-
-  // Update stats to use dynamic counts from Firestore
   const stats = [
-    { title: 'Total Users', count: counts.totalUsers, color: '#0056D2' },
-    { title: 'Schedule of Manager', count: counts.scheduleOfManager, color: '#28a745' },
-    { title: 'Appointment Booking', count: counts.appointmentBooking, color: '#ffc107' },
-    { title: 'Visit Schedule', count: counts.visitSchedule, color: '#17a2b8' },
-    { title: 'Prayer and Devotion Tracker', count: counts.prayerTracker, color: '#6f42c1' },
+    {
+      title: 'Users',
+      count: counts.totalUsers,
+      icon: <FontAwesome5 name="users" size={24} color="white" />,
+      color: '#000000',
+      onPress: () => Alert.alert('Users', 'Navigate to Users screen'),
+    },
+    {
+      title: 'Schedules',
+      count: counts.scheduleOfManager,
+      icon: <MaterialIcons name="schedule" size={24} color="white" />,
+      color: '#28a745',
+      onPress: () => Alert.alert('Schedules', 'Navigate to Schedules screen'),
+    },
+    {
+      title: 'Appointments',
+      count: counts.appointmentBooking,
+      icon: <Ionicons name="calendar" size={24} color="white" />,
+      color: '#ffc107',
+      onPress: () => Alert.alert('Appointments', 'Navigate to Appointments screen'),
+    },
+    {
+      title: 'Visit Schedules',
+      count: counts.visitSchedule,
+      icon: <Ionicons name="walk" size={24} color="white" />,
+      color: '#17a2b8',
+      onPress: () => Alert.alert('Visit Schedules', 'Navigate to Visit Schedules screen'),
+    },
+    {
+      title: 'Prayer Logs',
+      count: counts.prayerTracker,
+      icon: <FontAwesome5 name="pray" size={24} color="white" />,
+      color: '#6f42c1',
+      onPress: () => Alert.alert('Prayer Logs', 'Navigate to Prayer Logs screen'),
+    },
   ];
 
+  const pieData = [
+    {
+      name: 'Prayer',
+      population: Math.round(counts.prayerTracker * 0.6),
+      color: '#4e73df',
+      legendFontColor: '#333',
+      legendFontSize: 14,
+    },
+    {
+      name: 'Devotion',
+      population: Math.round(counts.prayerTracker * 0.4),
+      color: '#1cc88a',
+      legendFontColor: '#333',
+      legendFontSize: 14,
+    },
+  ];
+
+  // Prepare BarChart data from scheduleData
+  const barChartData = {
+    labels: scheduleData.map(sch =>
+      sch.title.length > 10 ? sch.title.slice(0, 10) + '...' : sch.title
+    ),
+    datasets: [
+      {
+        data: scheduleData.map(sch => {
+          const durationMs = sch.end_date - sch.start_date;
+          const durationDays = Math.max(Math.round(durationMs / (1000 * 60 * 60 * 24)), 1);
+          return durationDays;
+        }),
+      },
+    ],
+  };
+
   return (
-    <View style={{ flex: 1 }}>
+    <View style={styles.screen}>
       {/* Header */}
       <View style={styles.headerContainer}>
-        <TouchableOpacity onPress={openMenu} style={styles.hamburger}>
-          <Text style={{ fontSize: 28 }}>☰</Text>
-        </TouchableOpacity>
+        <SidebarToggle onOpen={() => setSidebarVisible(true)} />
+        <SidebarModal visible={sidebarVisible} onClose={() => setSidebarVisible(false)} />
         <View>
           <Text style={styles.header}>Pastor Dashboard</Text>
-          <Text style={styles.userInfo}>
-            {user.name} ({user.role})
-          </Text>
+          <Text style={styles.userInfo}>{user.name} ({user.role})</Text>
         </View>
       </View>
 
-      {/* Stats Cards */}
+      {/* Body */}
       <ScrollView contentContainerStyle={styles.container}>
+        {/* Stats Cards */}
         <View style={styles.cardsContainer}>
           {stats.map((item, index) => (
             <View key={index} style={[styles.card, { backgroundColor: item.color }]}>
+              {item.icon}
               <Text style={styles.cardCount}>{item.count}</Text>
               <Text style={styles.cardTitle}>{item.title}</Text>
+              <TouchableOpacity
+                style={styles.button}
+                onPress={item.onPress}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.buttonText}>View Details</Text>
+              </TouchableOpacity>
             </View>
           ))}
         </View>
+
+        {/* Pie Chart */}
+        <Text style={styles.sectionTitle}>Prayer vs Devotion</Text>
+        <PieChart
+          data={pieData}
+          width={SCREEN_WIDTH - 40}
+          height={200}
+          chartConfig={{
+            backgroundColor: '#fff',
+            backgroundGradientFrom: '#fff',
+            backgroundGradientTo: '#fff',
+            color: (opacity = 1) => `rgba(0, 123, 255, ${opacity})`,
+          }}
+          accessor="population"
+          backgroundColor="transparent"
+          paddingLeft="15"
+          absolute
+        />
+
+        {/* Bar Chart for Schedules */}
+        <Text style={styles.sectionTitle}>Schedule Durations (Days)</Text>
+        {loadingSchedules ? (
+          <ActivityIndicator size="large" color="#007bff" />
+        ) : scheduleData.length === 0 ? (
+          <Text style={styles.noDataText}>No schedules found.</Text>
+        ) : (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+       <BarChart
+  data={barChartData}
+  width={Math.max(SCREEN_WIDTH, scheduleData.length * 60)}
+  height={220}
+  fromZero
+  yAxisSuffix="d"
+  chartConfig={{
+    backgroundColor: '#fff',
+    backgroundGradientFrom: '#fff',
+    backgroundGradientTo: '#fff',
+    decimalPlaces: 0,
+    color: (opacity = 1) => `rgba(0, 123, 255, ${opacity})`,  // 👈 blue bars
+    labelColor: (opacity = 1) => `rgba(0, 0, 0, ${opacity})`, // black labels
+  }}
+  verticalLabelRotation={45}
+  showValuesOnTopOfBars
+/>
+
+          </ScrollView>
+        )}
       </ScrollView>
-
-      {/* Sidebar */}
-      <Modal transparent={true} visible={menuVisible} animationType="none" onRequestClose={closeMenu}>
-        <Pressable style={styles.modalOverlay} onPress={closeMenu}>
-          <Animated.View style={[styles.sidebar, { transform: [{ translateX: slideAnim }] }]}>
-            {/* Profile Section */}
-            <View style={styles.profileSection}>
-              <View style={styles.profileRow}>
-                <Text style={styles.profileName}>{user.name}</Text>
-                <View style={styles.onlineBullet} />
-              </View>
-              <Text style={styles.profileStatus}>{user.role}</Text>
-            </View>
-
-            {/* Sidebar Navigation */}
-            {user.role === 'admin' && (
-              <TouchableOpacity
-                style={styles.sidebarButton}
-                onPress={() => {
-                  closeMenu();
-                  navigation.navigate('ManagerUser');
-                }}
-              >
-                <Ionicons name="person-outline" size={20} color="#555" style={styles.icon} />
-                <Text style={styles.sidebarItemText}>Manager User</Text>
-              </TouchableOpacity>
-            )}
-
-            {(user.role === 'admin' || user.role === 'Pastor') && (
-  <TouchableOpacity
-    style={styles.sidebarButton}
-    onPress={() => {
-      closeMenu();
-      navigation.navigate('schedule');
-    }}
-  >
-    <MaterialIcons name="schedule" size={20} color="#555" style={styles.icon} />
-    <Text style={styles.sidebarItemText}>Schedule of Manager</Text>
-  </TouchableOpacity>
-)}
-
-
-  {(user.role === 'admin' || user.role === 'Pastor') && (
-  <TouchableOpacity
-              style={styles.sidebarButton}
-              onPress={() => {
-                closeMenu();
-                navigation.navigate('list');
-              }}
-            >
-              <MaterialIcons name="event-available" size={20} color="#555" style={styles.icon} />
-              <Text style={styles.sidebarItemText}>Appointment Booking</Text>
-            </TouchableOpacity>
-)}
-  {(user.role === 'admin' || user.role === 'Pastor') && (
- <TouchableOpacity
-              style={styles.sidebarButton}
-              onPress={() => {
-                closeMenu();
-                navigation.navigate('add_visit');
-              }}
-            >
-              <FontAwesome5 name="calendar-check" size={18} color="#555" style={styles.icon} />
-              <Text style={styles.sidebarItemText}> Add Visit Schedule</Text>
-            </TouchableOpacity>
-)}         
-
-
- {(user.role === 'admin' || user.role === 'Pastor'|| user.role==='member') && (
- <TouchableOpacity
-              style={styles.sidebarButton}
-              onPress={() => {
-                closeMenu();
-                navigation.navigate('visit');
-              }}
-            >
-              <FontAwesome5 name="calendar-check" size={18} color="#555" style={styles.icon} />
-              <Text style={styles.sidebarItemText}>Visit Schedule</Text>
-            </TouchableOpacity>
-)}         
-
-     {user?.role === 'Pastor' && (
-  <TouchableOpacity
-    style={styles.sidebarButton}
-    onPress={() => {
-      closeMenu();
-      navigation.navigate('tracker', { user });
-
-    }}
-  >
-    <Ionicons name="book-outline" size={20} color="#555" style={styles.icon} />
-    <Text style={styles.sidebarItemText}>Prayer & Devotion Tracker</Text>
-  </TouchableOpacity>
-)}
-
- 
- {( user.role === 'member') && (
- <TouchableOpacity
-              style={styles.sidebarButton}
-              onPress={() => {
-                closeMenu();
-                navigation.navigate('booking');
-              }}
-            >
-<Ionicons name="calendar-outline" size={20} color="#555" style={styles.icon} />
-              <Text style={styles.sidebarItemText}>Request appointment</Text>
-            </TouchableOpacity>
-)}         
-           
-{( user.role === 'member') && (
- <TouchableOpacity
-              style={styles.sidebarButton}
-              onPress={() => {
-                closeMenu();
-                navigation.navigate('tracker');
-              }}
-            >
-<Ionicons name="eye-outline" size={20} color="#555" style={styles.icon} />
-              <Text style={styles.sidebarItemText}>View Visit Schedule</Text>
-            </TouchableOpacity>
-)}     
-
-
-{( user.role === 'member') && (
- <TouchableOpacity
-              style={styles.sidebarButton}
-              onPress={() => {
-                closeMenu();
-                navigation.navigate('logs');
-              }}
-            >
-<Ionicons name="journal-outline" size={20} color="#555" style={styles.icon} />
-              <Text style={styles.sidebarItemText}>Log Prayers and Devotions</Text>
-            </TouchableOpacity>
-)}  
-
-{( user.role === 'member') && (
- <TouchableOpacity
-              style={styles.sidebarButton}
-              onPress={() => {
-                closeMenu();
-                navigation.navigate('notify');
-              }}
-            >
-<Ionicons name="notifications-outline" size={20} color="#555" style={styles.icon} />
-              <Text style={styles.sidebarItemText}>Receive Notifications</Text>
-            </TouchableOpacity>
-)}  
-
-
-
-            {/* Logout */}
-            <TouchableOpacity
-              style={[styles.sidebarButton, { marginTop: 20 }]}
-              onPress={() => {
-                closeMenu();
-                navigation.navigate('Login');
-              }}
-            >
-              <MaterialIcons name="logout" size={20} color="#D9534F" style={styles.icon} />
-              <Text style={[styles.sidebarItemText, { color: '#D9534F' }]}>Logout</Text>
-            </TouchableOpacity>
-          </Animated.View>
-        </Pressable>
-      </Modal>
     </View>
   );
 };
 
 export default DashboardScreen;
 
-// ... your styles here (unchanged)
-
-
 const styles = StyleSheet.create({
+  screen: {
+    flex: 1,
+    backgroundColor: '#fff', // Changed background to white
+  },
   headerContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#f5f6fa',
+    backgroundColor: '#0056b3',
     paddingTop: 50,
     paddingBottom: 15,
     paddingHorizontal: 20,
   },
-  hamburger: {
-    marginRight: 20,
-  },
   header: {
     fontSize: 28,
     fontWeight: 'bold',
-    color: '#333',
+    color: '#fff',
   },
   userInfo: {
     fontSize: 14,
-    color: '#666',
+    color: '#ccc',
     marginTop: 4,
   },
   container: {
-    flexGrow: 1,
-    backgroundColor: '#f5f6fa',
     padding: 20,
-    alignItems: 'center',
-    justifyContent: 'flex-start',
   },
   cardsContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'space-between',
-    width: '100%',
   },
   card: {
     width: '48%',
-    paddingVertical: 30,
+    paddingVertical: 25,
     paddingHorizontal: 15,
     borderRadius: 12,
     marginBottom: 20,
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOpacity: 0.1,
-    shadowRadius: 10,
-    elevation: 5,
+    justifyContent: 'center',
   },
   cardCount: {
-    fontSize: 40,
+    fontSize: 32,
     fontWeight: 'bold',
     color: '#fff',
-    marginBottom: 10,
+    marginTop: 10,
   },
   cardTitle: {
-    fontSize: 16,
+    fontSize: 18,
     color: '#fff',
-    textAlign: 'center',
+    marginTop: 5,
   },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.4)',
-    flexDirection: 'row',
+  button: {
+    marginTop: 15,
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
   },
-  sidebar: {
-    width: '70%',
-    height: '100%',
-    backgroundColor: '#fff',
-    paddingTop: 60,
-    paddingHorizontal: 20,
-    shadowColor: '#000',
-    shadowOpacity: 0.3,
-    shadowRadius: 10,
-    elevation: 10,
-  },
-  profileSection: {
-    marginBottom: 30,
-    borderBottomWidth: 1,
-    borderBottomColor: '#ccc',
-    paddingBottom: 20,
-  },
-  profileRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  profileName: {
-    fontSize: 20,
-    fontWeight: 'bold',
-  },
-  onlineBullet: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: 'green',
-  },
-  profileStatus: {
-    marginTop: 4,
-    fontSize: 14,
-    color: '#666',
-  },
-  sidebarButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 15,
-  },
-  icon: {
-    marginRight: 10,
-  },
-  sidebarItemText: {
-    fontSize: 16,
-    color: '#555',
+  buttonText: {
+    color: '#fff',
     fontWeight: '600',
+  },
+  sectionTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: '#007bff',
+    marginBottom: 10,
+    marginTop: 15,
+  },
+  noDataText: {
+    color: '#333',
+    fontSize: 16,
   },
 });

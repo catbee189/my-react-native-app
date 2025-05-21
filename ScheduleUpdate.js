@@ -14,9 +14,12 @@ import {
 import { Ionicons, MaterialIcons, FontAwesome5 } from '@expo/vector-icons';
 import { db } from './firebase';
 import { doc, getDoc, updateDoc, addDoc, collection, Timestamp } from 'firebase/firestore';
-
+import SidebarModal from './SidebarModal';
+import SidebarToggle from './SidebarToggle';
 export default function ScheduleInsert({ route, navigation }) {
   const { scheduleId, refresh } = route.params || {};
+
+  const [sidebarVisible, setSidebarVisible] = useState(false);
 
   // Schedule form states
   const [title, setTitle] = useState('');
@@ -114,10 +117,11 @@ export default function ScheduleInsert({ route, navigation }) {
 
   return (
     <View style={styles.container}>
+
       {/* Menu button */}
-      <TouchableOpacity style={styles.menuButton} onPress={openMenu}>
-        <Ionicons name="menu" size={28} color="#007bff" />
-      </TouchableOpacity>
+  <SidebarToggle onOpen={() => setSidebarVisible(true)} />
+     <SidebarModal visible={sidebarVisible} onClose={() => setSidebarVisible(false)} />
+     
 
       <Text style={styles.heading}>{scheduleId ? 'Edit Schedule' : 'Add Schedule'}</Text>
 

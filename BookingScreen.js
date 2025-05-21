@@ -7,10 +7,7 @@ import {
   StyleSheet,
   ActivityIndicator,
   TextInput,
-  KeyboardAvoidingView,
-  Platform,
   Modal,
-  Pressable,
   Animated,
 } from "react-native";
 import { Picker } from "@react-native-picker/picker";
@@ -27,6 +24,8 @@ import {
   where,
 } from "firebase/firestore";
 import { db } from "./firebase";
+import SidebarModal from "./SidebarModal";
+import SidebarToggle from "./SidebarToggle";
 
 export default function ScheduleList({ currentUserId, navigation }) {
   const [schedules, setSchedules] = useState([]);
@@ -38,28 +37,7 @@ export default function ScheduleList({ currentUserId, navigation }) {
   const [selectedMemberId, setSelectedMemberId] = useState("");
   const [successModalVisible, setSuccessModalVisible] = useState(false);
   const [successData, setSuccessData] = useState(null);
-
-  const [menuVisible, setMenuVisible] = useState(false);
-  const slideAnim = useRef(new Animated.Value(-250)).current;
-
-  const openMenu = () => {
-    setMenuVisible(true);
-    Animated.timing(slideAnim, {
-      toValue: 0,
-      duration: 300,
-      useNativeDriver: true,
-    }).start();
-  };
-
-  const closeMenu = () => {
-    Animated.timing(slideAnim, {
-      toValue: -250,
-      duration: 300,
-      useNativeDriver: true,
-    }).start(() => {
-      setMenuVisible(false);
-    });
-  };
+  const [sidebarVisible, setSidebarVisible] = useState(false);
 
   useEffect(() => {
     const fetchSchedules = async () => {
@@ -101,23 +79,23 @@ export default function ScheduleList({ currentUserId, navigation }) {
       }
     };
 
+    const fetchMembers = async () => {
+      try {
+        const q = query(collection(db, "users"), where("role", "==", "member"));
+        const querySnapshot = await getDocs(q);
+        const memberList = querySnapshot.docs.map((doc) => ({
+          id: doc.id,
+          name: doc.data().name,
+        }));
+        setMembers(memberList);
+      } catch (error) {
+        console.error("Failed to fetch members:", error);
+      }
+    };
+
     fetchSchedules();
     fetchMembers();
   }, []);
-
-  const fetchMembers = async () => {
-    try {
-      const q = query(collection(db, "users"), where("role", "==", "member"));
-      const querySnapshot = await getDocs(q);
-      const memberList = querySnapshot.docs.map((doc) => ({
-        id: doc.id,
-        name: doc.data().name,
-      }));
-      setMembers(memberList);
-    } catch (error) {
-      console.error("Failed to fetch members:", error);
-    }
-  };
 
   const onSelectSchedule = (schedule) => {
     setSelectedSchedule(schedule);
@@ -175,14 +153,9 @@ export default function ScheduleList({ currentUserId, navigation }) {
   }
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-    >
-      {/* Menu Button */}
-      <TouchableOpacity onPress={openMenu} style={{ alignSelf: "flex-start", marginBottom: 10 }}>
-        <Ionicons name="menu" size={30} color="#333" />
-      </TouchableOpacity>
+    <View style={styles.container}>
+      <SidebarToggle onOpen={() => setSidebarVisible(true)} />
+      <SidebarModal visible={sidebarVisible} onClose={() => setSidebarVisible(false)} />
 
       <Text style={styles.header}>Available Schedules</Text>
       <FlatList
@@ -276,47 +249,7 @@ export default function ScheduleList({ currentUserId, navigation }) {
           </View>
         </View>
       </Modal>
-
-      {/* Sidebar Menu Modal */}
-      <Modal transparent={true} visible={menuVisible} animationType="none" onRequestClose={closeMenu}>
-        <Pressable style={styles.modalOverlay} onPress={closeMenu}>
-          <Animated.View style={[styles.sidebar, { transform: [{ translateX: slideAnim }] }]}>
-            <View style={styles.profileSection}>
-              <View style={styles.profileRow}>
-                <Text style={styles.profileName}>Pastor John</Text>
-                <View style={styles.onlineBullet} />
-              </View>
-              <Text style={styles.profileStatus}>Online</Text>
-            </View>
-
-            <TouchableOpacity style={styles.sidebarButton} onPress={() => { closeMenu(); navigation.navigate("ManagerUser"); }}>
-              <Ionicons name="person-outline" size={20} color="#555" style={styles.icon} />
-              <Text style={styles.sidebarItemText}>Manager User</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.sidebarButton} onPress={() => { closeMenu(); navigation.navigate("schedule"); }}>
-              <MaterialIcons name="schedule" size={20} color="#555" style={styles.icon} />
-              <Text style={styles.sidebarItemText}>Schedule of Manager</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.sidebarButton} onPress={() => { closeMenu(); navigation.navigate("booking"); }}>
-              <MaterialIcons name="event-available" size={20} color="#555" style={styles.icon} />
-              <Text style={styles.sidebarItemText}>Appointment Booking</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.sidebarButton} onPress={() => { closeMenu(); navigation.navigate("visit"); }}>
-              <FontAwesome5 name="calendar-check" size={18} color="#555" style={styles.icon} />
-              <Text style={styles.sidebarItemText}>Visit Schedule</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.sidebarButton} onPress={() => { closeMenu(); navigation.navigate("divition"); }}>
-              <Ionicons name="book-outline" size={20} color="#555" style={styles.icon} />
-              <Text style={styles.sidebarItemText}>Prayer & Devotion Tracker</Text>
-            </TouchableOpacity>
-          </Animated.View>
-        </Pressable>
-      </Modal>
-    </KeyboardAvoidingView>
+    </View>
   );
 }
 
@@ -338,7 +271,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     padding: 10,
     marginBottom: 15,
-    backgroundColor: "#fff",
+    backgroundColor: "#0118D8",
     textAlignVertical: "top",
   },
   requestButton: {
@@ -378,34 +311,4 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   modalCloseText: { color: "#fff", fontWeight: "bold" },
-
-  sidebar: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    width: 250,
-    height: "100%",
-    backgroundColor: "#fff",
-    padding: 20,
-    elevation: 10,
-    zIndex: 10,
-  },
-  profileSection: { marginBottom: 20 },
-  profileRow: { flexDirection: "row", alignItems: "center" },
-  profileName: { fontSize: 18, fontWeight: "bold" },
-  onlineBullet: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: "green",
-    marginLeft: 10,
-  },
-  profileStatus: { color: "gray" },
-  sidebarButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginVertical: 10,
-  },
-  sidebarItemText: { marginLeft: 10, fontSize: 16, color: "#333" },
-  icon: { width: 24 },
 });

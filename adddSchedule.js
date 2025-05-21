@@ -17,7 +17,8 @@ import { collection, addDoc, serverTimestamp, query, where, getDocs } from 'fire
 import { db } from './firebase';
 import { Ionicons, MaterialIcons, FontAwesome5 } from '@expo/vector-icons';
 import { Picker } from '@react-native-picker/picker'; // npm install @react-native-picker/picker
-
+import SidebarModal from './SidebarModal';
+import SidebarToggle from './SidebarToggle';
 export default function ScheduleInsert({ navigation }) {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -32,6 +33,7 @@ export default function ScheduleInsert({ navigation }) {
 
   const [showStartPicker, setShowStartPicker] = useState(false);
   const [showEndPicker, setShowEndPicker] = useState(false);
+  const [sidebarVisible, setSidebarVisible] = useState(false);
 
   // Fetch pastors with role 'pastor' from Firestore
   useEffect(() => {
@@ -161,9 +163,10 @@ export default function ScheduleInsert({ navigation }) {
     <>
       <View style={styles.container}>
         {/* Top menu icon */}
-        <TouchableOpacity onPress={openMenu} style={styles.menuIcon}>
-          <Ionicons name="menu" size={28} color="#333" />
-        </TouchableOpacity>
+      <SidebarToggle onOpen={() => setSidebarVisible(true)} />
+     <SidebarModal visible={sidebarVisible} onClose={() => setSidebarVisible(false)} />
+     
+
 
         <Text style={styles.heading}>Add Schedule</Text>
 

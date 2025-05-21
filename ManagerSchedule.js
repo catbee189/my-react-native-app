@@ -7,13 +7,24 @@ import {
   Alert,
   Platform,
   ScrollView,
+  Modal,
+  TextInput,
+  ActivityIndicator,
 } from 'react-native';
-import { collection, getDocs, doc, deleteDoc } from 'firebase/firestore';
+import { collection, getDocs, doc, deleteDoc, updateDoc } from 'firebase/firestore';
 import { db } from './firebase';
+import SidebarModal from './SidebarModal';
+import SidebarToggle from './SidebarToggle';
 
 export default function ScheduleList({ navigation }) {
   const [schedules, setSchedules] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [sidebarVisible, setSidebarVisible] = useState(false);
+
+  // Modal state for editing
+  const [editModalVisible, setEditModalVisible] = useState(false);
+  const [editSchedule, setEditSchedule] = useState(null);
+  const [updateLoading, setUpdateLoading] = useState(false);
 
   const fetchSchedules = async () => {
     setLoading(true);
@@ -30,6 +41,10 @@ export default function ScheduleList({ navigation }) {
     }
     setLoading(false);
   };
+
+  useEffect(() => {
+    fetchSchedules();
+  }, []);
 
   const confirmDelete = (id) => {
     if (Platform.OS === 'web') {
@@ -64,37 +79,77 @@ export default function ScheduleList({ navigation }) {
 
   const formatDate = (date) => {
     if (!date) return '-';
-    let d = date;
-    if (date.toDate) d = date.toDate();
-    return d.toLocaleString();
+    try {
+      const d = typeof date.toDate === 'function' ? date.toDate() : new Date(date);
+      return d.toLocaleString();
+    } catch (err) {
+      return '-';
+    }
   };
 
-  useEffect(() => {
-    fetchSchedules();
-  }, []);
+  // Open modal and prefill data for editing
+  const openEditModal = (schedule) => {
+    setEditSchedule({
+      id: schedule.id,
+      title: schedule.title || '',
+      location: schedule.location || '',
+      start_time:
+        schedule.start_time && typeof schedule.start_time.toDate === 'function'
+          ? schedule.start_time.toDate().toISOString().slice(0, 16)
+          : '',
+      end_time:
+        schedule.end_time && typeof schedule.end_time.toDate === 'function'
+          ? schedule.end_time.toDate().toISOString().slice(0, 16)
+          : '',
+    });
+    setEditModalVisible(true);
+  };
+
+  // Handle form input changes inside modal
+  const handleChange = (field, value) => {
+    setEditSchedule((prev) => ({ ...prev, [field]: value }));
+  };
+
+  // Update schedule in Firestore
+  const updateSchedule = async () => {
+    if (!editSchedule.title.trim()) {
+      Alert.alert('Validation', 'Title is required');
+      return;
+    }
+
+    setUpdateLoading(true);
+
+    try {
+      const scheduleRef = doc(db, 'schedules', editSchedule.id);
+      await updateDoc(scheduleRef, {
+        title: editSchedule.title,
+        location: editSchedule.location,
+        start_time: editSchedule.start_time ? new Date(editSchedule.start_time) : null,
+        end_time: editSchedule.end_time ? new Date(editSchedule.end_time) : null,
+      });
+      Alert.alert('Success', 'Schedule updated successfully');
+      setEditModalVisible(false);
+      fetchSchedules();
+    } catch (error) {
+      console.error('Update error:', error);
+      Alert.alert('Error', 'Failed to update schedule');
+    }
+    setUpdateLoading(false);
+  };
 
   return (
     <View style={{ flex: 1, backgroundColor: '#fff' }}>
-      <ScrollView contentContainerStyle={styles.container}>
-        {/* Back to Dashboard Button */}
-        <TouchableOpacity
-          style={[styles.button, { backgroundColor: '#6c757d', marginBottom: 10 }]}
-          onPress={() => navigation.navigate('dashboard')}
-        >
-          <Text style={styles.buttonText}>← Back to Dashboard</Text>
-        </TouchableOpacity>
+      {/* Sidebar */}
+      <SidebarToggle onOpen={() => setSidebarVisible(true)} />
+      <SidebarModal visible={sidebarVisible} onClose={() => setSidebarVisible(false)} />
 
-        {/* Add New Schedule Button */}
-        <TouchableOpacity
-          style={[styles.button, { marginBottom: 20 }]}
-          onPress={() => navigation.navigate('adddSchedule')}
-        >
-          <Text style={styles.buttonText}>Add New Schedule</Text>
-        </TouchableOpacity>
+      <ScrollView contentContainerStyle={styles.container}>
+        {/* Add New Schedule */}
+     
 
         {/* Schedule List */}
         {loading ? (
-          <Text>Loading...</Text>
+          <ActivityIndicator size="large" color="#007bff" />
         ) : schedules.length === 0 ? (
           <Text>No schedules found.</Text>
         ) : (
@@ -114,12 +169,7 @@ export default function ScheduleList({ navigation }) {
               <View style={styles.actionRow}>
                 <TouchableOpacity
                   style={[styles.actionButton, styles.editButton]}
-                  onPress={() =>
-                    navigation.navigate('editschedule', {
-                      scheduleId: schedule.id,
-                      scheduleData: schedule,
-                    })
-                  }
+                  onPress={() => openEditModal(schedule)}
                 >
                   <Text style={styles.actionText}>Edit</Text>
                 </TouchableOpacity>
@@ -135,6 +185,74 @@ export default function ScheduleList({ navigation }) {
           ))
         )}
       </ScrollView>
+
+      {/* Edit Modal */}
+      <Modal
+        visible={editModalVisible}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setEditModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Edit Schedule</Text>
+
+            <Text style={styles.inputLabel}>Title</Text>
+            <TextInput
+              style={styles.input}
+              value={editSchedule?.title}
+              onChangeText={(text) => handleChange('title', text)}
+              placeholder="Schedule Title"
+            />
+
+            <Text style={styles.inputLabel}>Location</Text>
+            <TextInput
+              style={styles.input}
+              value={editSchedule?.location}
+              onChangeText={(text) => handleChange('location', text)}
+              placeholder="Location"
+            />
+
+            <Text style={styles.inputLabel}>Start Time</Text>
+            <TextInput
+              style={styles.input}
+              value={editSchedule?.start_time}
+              onChangeText={(text) => handleChange('start_time', text)}
+              placeholder="YYYY-MM-DDTHH:mm"
+            />
+
+            <Text style={styles.inputLabel}>End Time</Text>
+            <TextInput
+              style={styles.input}
+              value={editSchedule?.end_time}
+              onChangeText={(text) => handleChange('end_time', text)}
+              placeholder="YYYY-MM-DDTHH:mm"
+            />
+
+            <View style={styles.modalButtons}>
+              <TouchableOpacity
+                style={[styles.button, { flex: 1, marginRight: 10 }]}
+                onPress={() => setEditModalVisible(false)}
+                disabled={updateLoading}
+              >
+                <Text style={styles.buttonText}>Cancel</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.button, { flex: 1, backgroundColor: '#28a745' }]}
+                onPress={updateSchedule}
+                disabled={updateLoading}
+              >
+                {updateLoading ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Text style={styles.buttonText}>Save</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -196,5 +314,40 @@ const styles = StyleSheet.create({
   actionText: {
     color: '#fff',
     fontWeight: 'bold',
+  },
+
+  // Modal styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    paddingHorizontal: 20,
+  },
+  modalContent: {
+    backgroundColor: '#fff',
+    borderRadius: 10,
+    padding: 20,
+    elevation: 5,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginBottom: 15,
+    textAlign: 'center',
+  },
+  inputLabel: {
+    fontWeight: '600',
+    marginTop: 10,
+  },
+  input: {
+    borderWidth: 1,
+    borderColor: '#ccc',
+    borderRadius: 6,
+    padding: 10,
+    marginTop: 5,
+  },
+  modalButtons: {
+    flexDirection: 'row',
+    marginTop: 20,
   },
 });

@@ -22,13 +22,14 @@ import {
   getDoc,
   updateDoc,
 } from 'firebase/firestore';
+import SidebarModal from './SidebarModal';
+import SidebarToggle from './SidebarToggle';
 
 const BookingListScreen = () => {
   const [appointments, setAppointments] = useState([]);
   const [loading, setLoading] = useState(true);
-
-  // Sidebar animation states
-  const [menuVisible, setMenuVisible] = useState(false);
+  const [sidebarVisible, setSidebarVisible] = useState(false); // Sidebar state
+  const [menuVisible, setMenuVisible] = useState(false); // Animated Sidebar
   const slideAnim = useRef(new Animated.Value(-300)).current;
   const navigation = useNavigation();
 
@@ -143,50 +144,50 @@ const BookingListScreen = () => {
   }, []);
 
   const confirmApprove = (id) => {
-  if (Platform.OS === 'web') {
-    if (window.confirm('Are you sure you want to approve this appointment?')) {
-      handleApprove(id);
+    if (Platform.OS === 'web') {
+      if (window.confirm('Are you sure you want to approve this appointment?')) {
+        handleApprove(id);
+      }
+    } else {
+      Alert.alert('Approve Appointment', 'Are you sure you want to approve this appointment?', [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Approve', onPress: () => handleApprove(id) },
+      ]);
     }
-  } else {
-    Alert.alert('Approve Appointment', 'Are you sure you want to approve this appointment?', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Approve', onPress: () => handleApprove(id) },
-    ]);
-  }
-};
+  };
 
-const confirmReject = (id) => {
-  if (Platform.OS === 'web') {
-    if (window.confirm('Are you sure you want to reject this appointment?')) {
-      handleReject(id);
+  const confirmReject = (id) => {
+    if (Platform.OS === 'web') {
+      if (window.confirm('Are you sure you want to reject this appointment?')) {
+        handleReject(id);
+      }
+    } else {
+      Alert.alert('Reject Appointment', 'Are you sure you want to reject this appointment?', [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Reject', onPress: () => handleReject(id) },
+      ]);
     }
-  } else {
-    Alert.alert('Reject Appointment', 'Are you sure you want to reject this appointment?', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Reject', onPress: () => handleReject(id) },
-    ]);
-  }
-};
+  };
 
-const handleApprove = async (id) => {
-  try {
-    await updateDoc(doc(db, 'appointments', id), { status: 'Approved' });
-    Alert.alert('Success', 'Appointment approved!');
-    setAppointments((prev) => prev.filter((item) => item.id !== id));
-  } catch (error) {
-    Alert.alert('Error', 'Failed to approve appointment');
-  }
-};
+  const handleApprove = async (id) => {
+    try {
+      await updateDoc(doc(db, 'appointments', id), { status: 'Approved' });
+      Alert.alert('Success', 'Appointment approved!');
+      setAppointments((prev) => prev.filter((item) => item.id !== id));
+    } catch (error) {
+      Alert.alert('Error', 'Failed to approve appointment');
+    }
+  };
 
-const handleReject = async (id) => {
-  try {
-    await updateDoc(doc(db, 'appointments', id), { status: 'Rejected' });
-    Alert.alert('Success', 'Appointment rejected!');
-    setAppointments((prev) => prev.filter((item) => item.id !== id));
-  } catch (error) {
-    Alert.alert('Error', 'Failed to reject appointment');
-  }
-};
+  const handleReject = async (id) => {
+    try {
+      await updateDoc(doc(db, 'appointments', id), { status: 'Rejected' });
+      Alert.alert('Success', 'Appointment rejected!');
+      setAppointments((prev) => prev.filter((item) => item.id !== id));
+    } catch (error) {
+      Alert.alert('Error', 'Failed to reject appointment');
+    }
+  };
 
   const renderItem = ({ item }) => (
     <View style={styles.card}>
@@ -200,19 +201,10 @@ const handleReject = async (id) => {
       {item.notes && <Text>Notes: {item.notes}</Text>}
 
       <View style={styles.actionButtons}>
-      <TouchableOpacity
-  style={[styles.button, styles.approveButton]}
-  onPress={() => confirmApprove(item.id)}
->
-  <Text style={styles.buttonText}>Approve</Text>
-</TouchableOpacity>
-
-
-
-        <TouchableOpacity
-          style={[styles.button, styles.rejectButton]}
-          onPress={() => confirmReject(item.id)}
-        >
+        <TouchableOpacity style={[styles.button, styles.approveButton]} onPress={() => confirmApprove(item.id)}>
+          <Text style={styles.buttonText}>Approve</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={[styles.button, styles.rejectButton]} onPress={() => confirmReject(item.id)}>
           <Text style={styles.buttonText}>Reject</Text>
         </TouchableOpacity>
       </View>
@@ -222,10 +214,8 @@ const handleReject = async (id) => {
 
   return (
     <View style={styles.container}>
-      <TouchableOpacity style={styles.menuButton} onPress={openMenu}>
-        <Ionicons name="menu" size={28} color="black" />
-      </TouchableOpacity>
-
+      <SidebarToggle onOpen={() => setSidebarVisible(true)} />
+      <SidebarModal visible={sidebarVisible} onClose={() => setSidebarVisible(false)} />
       <Text style={styles.header}>Pending Appointments</Text>
 
       {loading ? (
@@ -239,7 +229,6 @@ const handleReject = async (id) => {
         />
       )}
 
-      {/* Sidebar Modal */}
       <Modal transparent={true} visible={menuVisible} animationType="none" onRequestClose={closeMenu}>
         <Pressable style={styles.modalOverlay} onPress={closeMenu}>
           <Animated.View style={[styles.sidebar, { transform: [{ translateX: slideAnim }] }]}>
@@ -281,7 +270,6 @@ const handleReject = async (id) => {
 
 const styles = StyleSheet.create({
   container: { flex: 1, paddingTop: 40, paddingHorizontal: 20 },
-  menuButton: { position: 'absolute', top: 40, left: 20, zIndex: 10 },
   header: { fontSize: 24, fontWeight: 'bold', marginVertical: 20, textAlign: 'center' },
   card: {
     backgroundColor: '#f0f4ff',

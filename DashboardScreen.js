@@ -12,15 +12,28 @@ import {
 import { FontAwesome5, Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { PieChart, BarChart } from 'react-native-chart-kit';
 import { db } from './firebase';
-import { collection, getDocs } from 'firebase/firestore';
+import {
+  collection,
+  getDocs,
+  query,
+  where,
+} from 'firebase/firestore';
+
 import SidebarModal from './SidebarModal';
 import SidebarToggle from './SidebarToggle';
+import NavbarDashboard from './NavbarDashboard';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 
 const DashboardScreen = ({ navigation, route }) => {
   const user = route.params?.user || { name: 'Guest', role: 'N/A' };
+
+  const [pendingCount, setPendingCount] = useState(0);
+  const [showNotificationModal, setShowNotificationModal] = useState(false);
   const [sidebarVisible, setSidebarVisible] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [loadingSchedules, setLoadingSchedules] = useState(true);
+  const [scheduleData, setScheduleData] = useState([]);
   const [counts, setCounts] = useState({
     totalUsers: 0,
     scheduleOfManager: 0,
@@ -29,10 +42,7 @@ const DashboardScreen = ({ navigation, route }) => {
     prayerTracker: 0,
   });
 
-  const [scheduleData, setScheduleData] = useState([]);
-  const [loadingSchedules, setLoadingSchedules] = useState(true);
-
-  // Helper to get counts from Firestore
+  // Generic collection count
   const getCount = async (collectionName) => {
     try {
       const snapshot = await getDocs(collection(db, collectionName));
@@ -43,7 +53,6 @@ const DashboardScreen = ({ navigation, route }) => {
     }
   };
 
-  // Fetch counts on mount
   useEffect(() => {
     const fetchCounts = async () => {
       const [
@@ -70,7 +79,6 @@ const DashboardScreen = ({ navigation, route }) => {
     fetchCounts();
   }, []);
 
-  // Fetch schedule details for Bar Chart
   useEffect(() => {
     const fetchSchedules = async () => {
       try {
@@ -80,8 +88,12 @@ const DashboardScreen = ({ navigation, route }) => {
           return {
             id: doc.id,
             title: data.title || 'No Title',
-            start_date: data.start_date?.toDate ? data.start_date.toDate() : new Date(data.start_date),
-            end_date: data.end_date?.toDate ? data.end_date.toDate() : new Date(data.end_date),
+            start_date: data.start_date?.toDate
+              ? data.start_date.toDate()
+              : new Date(data.start_date),
+            end_date: data.end_date?.toDate
+              ? data.end_date.toDate()
+              : new Date(data.end_date),
           };
         });
         setScheduleData(schedules);
@@ -94,40 +106,59 @@ const DashboardScreen = ({ navigation, route }) => {
     fetchSchedules();
   }, []);
 
+useEffect(() => {
+  const fetchPendingBookings = async () => {
+    try {
+      const q = query(
+        collection(db, 'schedules'),
+        where('status', '==', 'pending')  // ✅ fixed here
+      );
+      const querySnapshot = await getDocs(q);
+      setPendingCount(querySnapshot.size); // ✅ counts pending
+    } catch (error) {
+      console.error('Error fetching pending bookings:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  fetchPendingBookings();
+}, []);
+
   const stats = [
     {
       title: 'Users',
       count: counts.totalUsers,
       icon: <FontAwesome5 name="users" size={24} color="white" />,
-      color: '#000000',
+      color: '#FCDBCD',
       onPress: () => Alert.alert('Users', 'Navigate to Users screen'),
     },
     {
       title: 'Schedules',
       count: counts.scheduleOfManager,
       icon: <MaterialIcons name="schedule" size={24} color="white" />,
-      color: '#28a745',
+      color: '#FEEBF6',
       onPress: () => Alert.alert('Schedules', 'Navigate to Schedules screen'),
     },
     {
       title: 'Appointments',
       count: counts.appointmentBooking,
       icon: <Ionicons name="calendar" size={24} color="white" />,
-      color: '#ffc107',
+      color: '#EBD6FB',
       onPress: () => Alert.alert('Appointments', 'Navigate to Appointments screen'),
     },
     {
       title: 'Visit Schedules',
       count: counts.visitSchedule,
       icon: <Ionicons name="walk" size={24} color="white" />,
-      color: '#17a2b8',
+      color: '#ADEED9',
       onPress: () => Alert.alert('Visit Schedules', 'Navigate to Visit Schedules screen'),
     },
     {
       title: 'Prayer Logs',
       count: counts.prayerTracker,
       icon: <FontAwesome5 name="pray" size={24} color="white" />,
-      color: '#6f42c1',
+      color: '#B0DB9C',
       onPress: () => Alert.alert('Prayer Logs', 'Navigate to Prayer Logs screen'),
     },
   ];
@@ -149,7 +180,6 @@ const DashboardScreen = ({ navigation, route }) => {
     },
   ];
 
-  // Prepare BarChart data from scheduleData
   const barChartData = {
     labels: scheduleData.map(sch =>
       sch.title.length > 10 ? sch.title.slice(0, 10) + '...' : sch.title
@@ -165,39 +195,42 @@ const DashboardScreen = ({ navigation, route }) => {
     ],
   };
 
+  if (loading) {
+    return (
+      <View style={styles.loader}>
+        <ActivityIndicator size="large" color="#fff" />
+      </View>
+    );
+  }
+
   return (
     <View style={styles.screen}>
-      {/* Header */}
-      <View style={styles.headerContainer}>
+      <View style={styles.topBar}>
         <SidebarToggle onOpen={() => setSidebarVisible(true)} />
-        <SidebarModal visible={sidebarVisible} onClose={() => setSidebarVisible(false)} />
-        <View>
-          <Text style={styles.header}>Pastor Dashboard</Text>
-          <Text style={styles.userInfo}>{user.name} ({user.role})</Text>
-        </View>
+        <NavbarDashboard
+          user={user}
+          pendingCount={pendingCount}
+          showNotificationModal={showNotificationModal}
+          setShowNotificationModal={setShowNotificationModal}
+        />
       </View>
 
-      {/* Body */}
+      <SidebarModal visible={sidebarVisible} onClose={() => setSidebarVisible(false)} />
+
       <ScrollView contentContainerStyle={styles.container}>
-        {/* Stats Cards */}
         <View style={styles.cardsContainer}>
           {stats.map((item, index) => (
             <View key={index} style={[styles.card, { backgroundColor: item.color }]}>
               {item.icon}
               <Text style={styles.cardCount}>{item.count}</Text>
               <Text style={styles.cardTitle}>{item.title}</Text>
-              <TouchableOpacity
-                style={styles.button}
-                onPress={item.onPress}
-                activeOpacity={0.7}
-              >
+              <TouchableOpacity style={styles.button} onPress={item.onPress}>
                 <Text style={styles.buttonText}>View Details</Text>
               </TouchableOpacity>
             </View>
           ))}
         </View>
 
-        {/* Pie Chart */}
         <Text style={styles.sectionTitle}>Prayer vs Devotion</Text>
         <PieChart
           data={pieData}
@@ -215,7 +248,6 @@ const DashboardScreen = ({ navigation, route }) => {
           absolute
         />
 
-        {/* Bar Chart for Schedules */}
         <Text style={styles.sectionTitle}>Schedule Durations (Days)</Text>
         {loadingSchedules ? (
           <ActivityIndicator size="large" color="#007bff" />
@@ -223,24 +255,23 @@ const DashboardScreen = ({ navigation, route }) => {
           <Text style={styles.noDataText}>No schedules found.</Text>
         ) : (
           <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-       <BarChart
-  data={barChartData}
-  width={Math.max(SCREEN_WIDTH, scheduleData.length * 60)}
-  height={220}
-  fromZero
-  yAxisSuffix="d"
-  chartConfig={{
-    backgroundColor: '#fff',
-    backgroundGradientFrom: '#fff',
-    backgroundGradientTo: '#fff',
-    decimalPlaces: 0,
-    color: (opacity = 1) => `rgba(0, 123, 255, ${opacity})`,  // 👈 blue bars
-    labelColor: (opacity = 1) => `rgba(0, 0, 0, ${opacity})`, // black labels
-  }}
-  verticalLabelRotation={45}
-  showValuesOnTopOfBars
-/>
-
+            <BarChart
+              data={barChartData}
+              width={Math.max(SCREEN_WIDTH, scheduleData.length * 60)}
+              height={220}
+              fromZero
+              yAxisSuffix="d"
+              chartConfig={{
+                backgroundColor: '#fff',
+                backgroundGradientFrom: '#fff',
+                backgroundGradientTo: '#fff',
+                decimalPlaces: 0,
+                color: (opacity = 1) => `rgba(0, 123, 255, ${opacity})`,
+                labelColor: (opacity = 1) => `rgba(0, 0, 0, ${opacity})`,
+              }}
+              verticalLabelRotation={45}
+              showValuesOnTopOfBars
+            />
           </ScrollView>
         )}
       </ScrollView>
@@ -251,31 +282,17 @@ const DashboardScreen = ({ navigation, route }) => {
 export default DashboardScreen;
 
 const styles = StyleSheet.create({
-  screen: {
-    flex: 1,
-    backgroundColor: '#fff', // Changed background to white
-  },
-  headerContainer: {
+  screen: { flex: 1, backgroundColor: '#fff' },
+  topBar: {
     flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: '#0056b3',
-    paddingTop: 50,
+    paddingTop: 10,
     paddingBottom: 15,
     paddingHorizontal: 20,
+    backgroundColor: '#0056b3',
   },
-  header: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#fff',
-  },
-  userInfo: {
-    fontSize: 14,
-    color: '#ccc',
-    marginTop: 4,
-  },
-  container: {
-    padding: 20,
-  },
+  container: { padding: 20 },
   cardsContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -284,11 +301,13 @@ const styles = StyleSheet.create({
   card: {
     width: '48%',
     paddingVertical: 25,
+    marginTop:90,
     paddingHorizontal: 15,
     borderRadius: 12,
     marginBottom: 20,
     alignItems: 'center',
     justifyContent: 'center',
+    position:'relatives',
   },
   cardCount: {
     fontSize: 32,
@@ -322,5 +341,11 @@ const styles = StyleSheet.create({
   noDataText: {
     color: '#333',
     fontSize: 16,
+  },
+  loader: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#0056b3',
   },
 });

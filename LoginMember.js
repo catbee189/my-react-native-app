@@ -72,7 +72,7 @@ const FloatingInput = ({ label, icon, isPassword, value, setValue }) => {
   );
 };
 
-const LoginForm = ({ navigation }) => {
+const LoginMember = ({ navigation }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
 
@@ -91,7 +91,7 @@ const LoginForm = ({ navigation }) => {
     }
 
     try {
-      const usersRef = collection(db, 'users');
+      const usersRef = collection(db,'members');
       const q = query(usersRef, where('email', '==', email), where('password', '==', password));
       const querySnapshot = await getDocs(q);
 
@@ -106,10 +106,10 @@ const LoginForm = ({ navigation }) => {
       showAlert('Success', `Welcome back, ${userData.name || email}!`);
 
       setTimeout(() => {
-navigation.navigate('DashboardScreen', { user: userData });
+navigation.navigate('landings_page', { user: userData });
       }, 1000);
 
-    } catch (error) {w
+    } catch (error) {
       showAlert('Error', error.message);
     }
   };
@@ -117,21 +117,26 @@ navigation.navigate('DashboardScreen', { user: userData });
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Image source={require('./assets/dog.jpg')} style={styles.logo} resizeMode="contain" />
-        <Text style={styles.signin}>Sign In</Text>
+        <Image source={require('./assets/OIP.jpg')} style={styles.logo} resizeMode="contain" />
+      
       </View>
 
       <FloatingInput label="Email" icon="mail-outline" value={email} setValue={setEmail} />
       <FloatingInput label="Password" icon="lock-closed-outline" isPassword value={password} setValue={setPassword} />
 
       <TouchableOpacity style={styles.loginButton} onPress={handleLogin}>
-        <Text style={styles.loginButtonText}>Login</Text>
+        <Text style={styles.loginButtonText}>Sign in</Text>
       </TouchableOpacity>
-  <TouchableOpacity onPress={() => navigation.navigate('Forgot')}>
-    <Text style={styles.forgotText}>Forgot Password?</Text>
-  </TouchableOpacity>
-     
-         
+
+      <View style={styles.linkcontainer}>
+        <TouchableOpacity onPress={() => navigation.navigate('forgetmem')}>
+        <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
+      </TouchableOpacity>
+      
+      <TouchableOpacity onPress={() => navigation.navigate('signup')}>
+        <Text style={styles.forgotPasswordText}>Sign up  for pastor</Text>
+      </TouchableOpacity>
+      </View>
     </View>
   );
 };
@@ -147,16 +152,18 @@ const styles = StyleSheet.create({
     borderBottomColor: '#007BFF',
     borderBottomWidth: 2,
   },
- forgotText: {
-  color: '#007bff',
-  textAlign: 'center',
-  marginTop: 10,
-  textDecorationLine: 'underline',
-},
-
-  logo: { width: 260, height: 60, marginBottom: 20, borderRadius: 30, overflow: 'hidden' },
+  forgotPasswordText: {
+    color: 'blue',
+    fontSize: 14,
+  },
+  signUpText: {
+    color: 'green',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  logo: { width: 170, height: 170, marginBottom: 20, borderRadius: 50, overflow: 'hidden' },
   inputWrapper: { position: 'relative', marginBottom: 32, paddingLeft: 36 },
-  input: {
+ input: {
     height: 40,
     fontSize: 16,
     color: '#007BFF',
@@ -165,7 +172,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
   },
   inputFocused: { borderBottomColor: '#0056D2', borderBottomWidth: 2, outlineWidth: 0 },
-  inputEmpty: { borderBottomWidth: 0 },
+  inputEmpty: { borderBottomWidth: 2 },
   icon: { position: 'absolute', left: 8, top: 14 },
   loginButton: {
     backgroundColor: '#007BFF',
@@ -174,7 +181,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: 10,
   },
+  linkcontainer:{
+     flexDirection:'row',
+     justifyContent:'space-between',
+      marginTop: 20,
+    paddingHorizontal: 40,
+
+  },
+
   loginButtonText: { color: '#fff', fontSize: 16, fontWeight: 'bold', textTransform: 'uppercase' },
 });
 
-export default LoginForm;
+export default LoginMember;

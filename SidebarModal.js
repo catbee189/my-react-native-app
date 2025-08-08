@@ -1,6 +1,4 @@
-import { FontAwesome5 } from '@expo/vector-icons';
-import { useNavigation, useRoute } from '@react-navigation/native';
-import { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Animated,
   Modal,
@@ -9,15 +7,17 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { FontAwesome5 } from '@expo/vector-icons';
+import { useNavigation, useRoute } from '@react-navigation/native';
 
 export default function SidebarModal({ visible, onClose }) {
   const slideAnim = useRef(new Animated.Value(-300)).current;
   const navigation = useNavigation();
   const route = useRoute();
+  const [showNotificationModal, setShowNotificationModal] = useState(false);
 
-  // Dummy fallback user data
   const user = route.params?.user || { name: 'Guest', role: 'N/A' };
-  const role = user.role?.toLowerCase();
+  const role = user.role?.toLowerCase() || 'member';
 
   useEffect(() => {
     if (visible) {
@@ -35,31 +35,22 @@ export default function SidebarModal({ visible, onClose }) {
     }
   }, [visible]);
 
-  // Define all links with role access
   const allLinks = [
-    { label: 'Dashboard', icon: 'chart-bar', screen: 'DashboardScreen', roles: ['admin', 'pastor', 'member'] },
-        { label: 'Add Users', icon: 'users', screen: 'add', roles: ['admin'] },
+    { label: 'Dashboard', icon: 'chart-bar', screen: 'DashboardScreen', roles: [ 'pastor', 'member'] },
+    { label: 'Add Users', icon: 'users', screen: 'add', roles: ['pastor'] },
+        { label: 'manage users', icon: 'users', screen: 'manageuser', roles: ['pastor'] },
 
-    { label: 'Manage Users', icon: 'users', screen: 'ManagerUserScreen', roles: ['admin'] },
-           { label: 'Add Schedule', icon: 'calendar-alt', screen: 'adddSchedule', roles: ['admin', 'pastor','member'] },
-
-    { label: 'Schedule', icon: 'calendar-alt', screen: 'ManagerSchedule', roles: ['admin', 'pastor','member'] },
-
-    
-    
+    { label: 'Members', icon: 'users', screen: 'ManagerUserScreen', roles: ['pastor'] },
+    { label: 'Add Schedule', icon: 'calendar-alt', screen: 'adddSchedule', roles: ['pastor'] },
+    { label: 'Schedule', icon: 'calendar-alt', screen: 'ManagerSchedule', roles: [ 'pastor', 'member'] },
     { label: 'Request Appointment', icon: 'calendar-alt', screen: 'BookingScreen', roles: ['member'] },
-
-    { label: 'Appointments', icon: 'handshake', screen: 'listt_booking', roles: ['admin', 'pastor'] },
-
-    { label: 'Visit Schedules', icon: 'route', screen: 'VisitSchedule', roles: ['admin', 'pastor','member'] },
-    { label: 'Prayer & Devotion', icon: 'praying-hands', screen: 'AddPrayerTracker', roles: [ 'pastor'] },
-      { label: 'Log Prayers and Devotions', icon: 'praying-hands', screen: 'logs', roles: ['member'] },
-
-      { label: 'Logout', icon: 'sign-out-alt', screen: 'Login', roles: ['pastor','member','admin'] },
-
+    { label: 'Appointments', icon: 'handshake', screen: 'listt', roles: ['admin', 'pastor'] },
+    { label: 'Visit Schedules', icon: 'route', screen: 'VisitSchedule', roles: [ 'pastor', 'member'] },
+    { label: 'Prayer & Devotion', icon: 'praying-hands', screen: 'AddPrayerTracker', roles: ['pastor'] },
+    { label: 'Log Prayers and Devotions', icon: 'praying-hands', screen: 'logs', roles: ['member'] },
+    { label: 'Logout', icon: 'sign-out-alt', screen: 'Login', roles: ['pastor', 'member'] },
   ];
 
-  // Filter links by user role
   const filteredLinks = allLinks.filter(link => link.roles.includes(role));
 
   return (

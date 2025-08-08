@@ -1,22 +1,21 @@
 import React, { useRef, useState } from 'react';
 import {
   Alert,
-  Animated,
-  Button,
-  Modal,
   Platform,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
   View,
+  Button,
 } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
-import { addDoc, collection } from 'firebase/firestore';
-import { db } from './firebase'; // Ensure this is correctly configured
-import SidebarModal from './SidebarModal'; // Sidebar with navigation links
-import SidebarToggle from './SidebarToggle'; // Menu icon to open sidebar
+import { addDoc, collection, Timestamp } from 'firebase/firestore';
+import { db } from './firebase';
+import SidebarModal from './SidebarModal';
+import SidebarToggle from './SidebarToggle';
 
+// ✅ Platform-compatible alert
 const showAlert = (title, message) => {
   if (Platform.OS === 'web') {
     window.alert(`${title}\n\n${message}`);
@@ -32,10 +31,7 @@ export default function AddUserScreen({ navigation, route }) {
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [address, setAddress] = useState('');
-  const slideAnim = useRef(new Animated.Value(-250)).current;
   const [sidebarVisible, setSidebarVisible] = useState(false);
-
-  const user = route?.params?.user || { name: 'Guest', role: 'N/A' };
 
   const handleSubmit = async () => {
     if (!name || !role || !email || !phone || !password) {
@@ -51,15 +47,20 @@ export default function AddUserScreen({ navigation, route }) {
         phone,
         password,
         address,
-        createdAt: new Date(),
+        createdAt: Timestamp.now(), // ✅ use Timestamp instead of new Date()
       });
+
       showAlert('Success', 'User saved successfully!');
+
+      // Clear form
       setName('');
       setRole('');
       setEmail('');
       setPhone('');
       setPassword('');
       setAddress('');
+
+      // Navigate
       navigation.navigate('ManagerUser');
     } catch (error) {
       console.error('Error saving user:', error);
@@ -67,7 +68,7 @@ export default function AddUserScreen({ navigation, route }) {
     }
   };
 
-  return (
+  return ( 
     <>
       <SidebarToggle onOpen={() => setSidebarVisible(true)} />
       <SidebarModal visible={sidebarVisible} onClose={() => setSidebarVisible(false)} />
@@ -88,10 +89,8 @@ export default function AddUserScreen({ navigation, route }) {
             onValueChange={(itemValue) => setRole(itemValue)}
             mode="dropdown"
           >
-            <Picker.Item label="Select Role *" value="" />
-            <Picker.Item label="Admin" value="Admin" />
+            <Picker.Item label="Select Role" value="" />
             <Picker.Item label="Pastor" value="Pastor" />
-            <Picker.Item label="Members" value="Members" />
           </Picker>
         </View>
 

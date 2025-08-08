@@ -1,314 +1,297 @@
-import React, { useEffect, useState, useRef } from 'react';
-import {
-  View,
-  Text,
-  FlatList,
-  StyleSheet,
-  ActivityIndicator,
-  Alert,
-  TouchableOpacity,
-  Modal,
-  Pressable,
-  Animated,
-  Platform,
-} from 'react-native';
-import { Ionicons, MaterialIcons, FontAwesome5 } from '@expo/vector-icons';
-import { useNavigation } from '@react-navigation/native';
-import { db } from './firebase';
-import {
-  collection,
-  getDocs,
-  doc,
-  getDoc,
-  updateDoc,
-} from 'firebase/firestore';
-import SidebarModal from './SidebarModal';
-import SidebarToggle from './SidebarToggle';
+  import React, { useEffect, useState } from 'react';
+  import {
+    View,
+    Text,
+    FlatList,
+    StyleSheet,
+    ActivityIndicator,
+    Alert,
+    TouchableOpacity,
+    Modal,
+    TextInput,
+  } from 'react-native';
+  import { db } from './firebase';
+  import {
+    collection,
+    getDocs,
+    doc,
+    updateDoc,
+  } from 'firebase/firestore';
+  import SidebarToggle from './SidebarToggle';
+  import SidebarModal from './SidebarModal';
 
-const BookingListScreen = () => {
-  const [appointments, setAppointments] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [sidebarVisible, setSidebarVisible] = useState(false); // Sidebar state
-  const [menuVisible, setMenuVisible] = useState(false); // Animated Sidebar
-  const slideAnim = useRef(new Animated.Value(-300)).current;
-  const navigation = useNavigation();
+  const BookingRequestScreen = () => {
+    const [bookings, setBookings] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [sidebarVisible, setSidebarVisible] = useState(false);
 
-  const openMenu = () => {
-    setMenuVisible(true);
-    Animated.timing(slideAnim, {
-      toValue: 0,
-      duration: 300,
-      useNativeDriver: true,
-    }).start();
+    const [assignModalVisible, setAssignModalVisible] = useState(false);
+    const [selectedBookingId, setSelectedBookingId] = useState(null);
+    const [pastorName, setPastorName] = useState('');
+useEffect(() => {
+  const fetchMergedBookings = async () => {
+    try {
+      const schedulesSnapshot = await getDocs(collection(db, 'schedules'));
+      const requestsSnapshot = await getDocs(collection(db, 'request_bookings'));
+
+      // Only include schedules with status 'pending'
+      const scheduleMap = {};
+      schedulesSnapshot.docs.forEach(doc => {
+        const data = doc.data();
+        if (data.status === 'pending') {
+          scheduleMap[doc.id] = { schedule_id: doc.id, ...data };
+        }
+      });
+
+      // Only include requests tied to a pending schedule
+      const filteredRequests = requestsSnapshot.docs
+        .map(doc => ({ id: doc.id, ...doc.data() }))
+        .filter(req => scheduleMap[req.schedule_id]);
+
+      // Merge the schedule info into the request
+      const merged = filteredRequests.map(req => {
+        const schedule = scheduleMap[req.schedule_id];
+        return {
+          ...req,
+          ...(schedule || {}),
+        };
+      });
+
+      setBookings(merged);
+    } catch (error) {
+      console.error('Error fetching merged bookings:', error);
+      Alert.alert('Error', 'Failed to load booking requests');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const closeMenu = () => {
-    Animated.timing(slideAnim, {
-      toValue: -300,
-      duration: 300,
-      useNativeDriver: true,
-    }).start(() => setMenuVisible(false));
-  };
+  fetchMergedBookings();
+}, []);
 
-  useEffect(() => {
-    const fetchAppointments = async () => {
-      try {
-        const appointmentSnapshot = await getDocs(collection(db, 'appointments'));
-        const appointmentData = appointmentSnapshot.docs.map((doc) => ({
-          id: doc.id,
-          ...doc.data(),
-        }));
-
-        const detailedData = await Promise.all(
-          appointmentData.map(async (appointment) => {
-            let memberName = null;
-            let pastorName = null;
-            let scheduleInfo = null;
-            let Titlename = null;
-            let location = null;
-
-            const formatDate = (timestamp) => {
-              if (timestamp?.seconds) {
-                const date = new Date(timestamp.seconds * 1000);
-                return new Intl.DateTimeFormat('en-US', {
-                  year: 'numeric',
-                  month: 'short',
-                  day: '2-digit',
-                }).format(date);
-              }
-              return null;
-            };
-
-            if (appointment.member_id) {
-              const memberDoc = await getDoc(doc(db, 'users', appointment.member_id));
-              if (memberDoc.exists()) {
-                memberName = memberDoc.data().fullName || memberDoc.data().name || null;
-              }
-            }
-
-            if (appointment.pastor_id) {
-              const pastorDoc = await getDoc(doc(db, 'users', appointment.pastor_id));
-              if (pastorDoc.exists()) {
-                pastorName = pastorDoc.data().fullName || pastorDoc.data().name || null;
-              }
-            }
-
-            if (appointment.schedule_id) {
-              const scheduleDoc = await getDoc(doc(db, 'schedules', appointment.schedule_id));
-              if (scheduleDoc.exists()) {
-                const scheduleData = scheduleDoc.data();
-                Titlename = scheduleData.title || null;
-                location = scheduleData.location || null;
-                const start = formatDate(scheduleData.start_time);
-                const end = formatDate(scheduleData.end_time);
-                if (start && end) {
-                  scheduleInfo = `${start} to ${end}`;
-                }
-              }
-            }
-
-            return {
-              ...appointment,
-              appointment_id: appointment.appointment_id || appointment.id,
-              Titlename,
-              memberName,
-              pastorName,
-              scheduleInfo,
-              location,
-              start_date: formatDate(appointment.start_date),
-              end_date: formatDate(appointment.end_date),
-              created_at: formatDate(appointment.created_at),
-            };
-          })
-        );
-
-        const pendingAppointments = detailedData.filter(
-          (appt) =>
-            appt.status === 'pending' &&
-            appt.memberName &&
-            appt.pastorName &&
-            appt.scheduleInfo &&
-            appt.Titlename
-        );
-
-        setAppointments(pendingAppointments);
-      } catch (error) {
-        console.error('Error fetching appointments:', error);
-        Alert.alert('Error', 'Failed to fetch appointments');
-      } finally {
-        setLoading(false);
+    const formatDate = (timestamp) => {
+      if (timestamp?.seconds) {
+        const date = new Date(timestamp.seconds * 1000);
+        return date.toLocaleDateString('en-US', {
+          year: 'numeric',
+          month: 'short',
+          day: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+        });
       }
+      return 'N/A';
     };
 
-    fetchAppointments();
-  }, []);
+    const openAssignModal = (bookingId) => {
+      setSelectedBookingId(bookingId);
+      setAssignModalVisible(true);
+    };
 
-  const confirmApprove = (id) => {
-    if (Platform.OS === 'web') {
-      if (window.confirm('Are you sure you want to approve this appointment?')) {
-        handleApprove(id);
-      }
+const handleAssignPastor = async () => {
+  if (!pastorName.trim()) {
+    Alert.alert('Validation ⚠️', 'Please enter a pastor name');
+    return;
+  }
+
+  try {
+    const selectedBooking = bookings.find(b => b.id === selectedBookingId);
+    const timestampNow = new Date();
+
+    // ✅ Only update the schedules collection
+    if (selectedBooking.schedule_id) {
+      await updateDoc(doc(db, 'schedules', selectedBooking.schedule_id), {
+        status: 'approved',
+        assigned_pastor: pastorName.trim(), // optional if you want to store the pastor name
+        updated_at: timestampNow,
+      });
+
+      // Update local UI (optional)
+      setBookings((prev) => prev.filter((item) => item.id !== selectedBookingId));
+      setAssignModalVisible(false);
+      Alert.alert('Success ✅', `Pastor ${pastorName.trim()} has been assigned and schedule approved.`);
     } else {
-      Alert.alert('Approve Appointment', 'Are you sure you want to approve this appointment?', [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Approve', onPress: () => handleApprove(id) },
-      ]);
+      console.warn('No schedule_id found for booking:', selectedBookingId);
     }
-  };
 
-  const confirmReject = (id) => {
-    if (Platform.OS === 'web') {
-      if (window.confirm('Are you sure you want to reject this appointment?')) {
-        handleReject(id);
-      }
-    } else {
-      Alert.alert('Reject Appointment', 'Are you sure you want to reject this appointment?', [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Reject', onPress: () => handleReject(id) },
-      ]);
-    }
-  };
-
-  const handleApprove = async (id) => {
-    try {
-      await updateDoc(doc(db, 'appointments', id), { status: 'Approved' });
-      Alert.alert('Success', 'Appointment approved!');
-      setAppointments((prev) => prev.filter((item) => item.id !== id));
-    } catch (error) {
-      Alert.alert('Error', 'Failed to approve appointment');
-    }
-  };
-
-  const handleReject = async (id) => {
-    try {
-      await updateDoc(doc(db, 'appointments', id), { status: 'Rejected' });
-      Alert.alert('Success', 'Appointment rejected!');
-      setAppointments((prev) => prev.filter((item) => item.id !== id));
-    } catch (error) {
-      Alert.alert('Error', 'Failed to reject appointment');
-    }
-  };
-
-  const renderItem = ({ item }) => (
-    <View style={styles.card}>
-      <Text style={styles.title}>Appointment Name: {item.Titlename}</Text>
-      <Text>Member: {item.memberName}</Text>
-      <Text>Pastor: {item.pastorName}</Text>
-      <Text>Schedule: {item.scheduleInfo}</Text>
-      {item.location && <Text>Location: {item.location}</Text>}
-      {item.start_date && <Text>Start Date: {item.start_date}</Text>}
-      {item.end_date && <Text>End Date: {item.end_date}</Text>}
-      {item.notes && <Text>Notes: {item.notes}</Text>}
-
-      <View style={styles.actionButtons}>
-        <TouchableOpacity style={[styles.button, styles.approveButton]} onPress={() => confirmApprove(item.id)}>
-          <Text style={styles.buttonText}>Approve</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={[styles.button, styles.rejectButton]} onPress={() => confirmReject(item.id)}>
-          <Text style={styles.buttonText}>Reject</Text>
-        </TouchableOpacity>
-      </View>
-      {item.created_at && <Text>Created At: {item.created_at}</Text>}
-    </View>
-  );
-
-  return (
-    <View style={styles.container}>
-      <SidebarToggle onOpen={() => setSidebarVisible(true)} />
-      <SidebarModal visible={sidebarVisible} onClose={() => setSidebarVisible(false)} />
-      <Text style={styles.header}>Pending Appointments</Text>
-
-      {loading ? (
-        <ActivityIndicator size="large" color="#0000ff" />
-      ) : (
-        <FlatList
-          data={appointments}
-          keyExtractor={(item) => item.appointment_id || item.id}
-          renderItem={renderItem}
-          ListEmptyComponent={<Text style={{ textAlign: 'center' }}>No pending appointments.</Text>}
-        />
-      )}
-
-      <Modal transparent={true} visible={menuVisible} animationType="none" onRequestClose={closeMenu}>
-        <Pressable style={styles.modalOverlay} onPress={closeMenu}>
-          <Animated.View style={[styles.sidebar, { transform: [{ translateX: slideAnim }] }]}>
-            <View style={styles.profileSection}>
-              <Text style={styles.profileName}>Pastor John</Text>
-              <Text style={styles.profileStatus}>Online</Text>
-            </View>
-
-            <TouchableOpacity style={styles.sidebarButton} onPress={() => { closeMenu(); navigation.navigate("ManagerUser"); }}>
-              <Ionicons name="person-outline" size={20} color="#555" />
-              <Text style={styles.sidebarItemText}>Manager User</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.sidebarButton} onPress={() => { closeMenu(); navigation.navigate("schedule"); }}>
-              <MaterialIcons name="schedule" size={20} color="#555" />
-              <Text style={styles.sidebarItemText}>Schedule of Manager</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.sidebarButton} onPress={() => { closeMenu(); navigation.navigate("booking"); }}>
-              <MaterialIcons name="event-available" size={20} color="#555" />
-              <Text style={styles.sidebarItemText}>Appointment Booking</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.sidebarButton} onPress={() => { closeMenu(); navigation.navigate("visit"); }}>
-              <FontAwesome5 name="calendar-check" size={18} color="#555" />
-              <Text style={styles.sidebarItemText}>Visit Schedule</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.sidebarButton} onPress={() => { closeMenu(); navigation.navigate("divition"); }}>
-              <Ionicons name="book-outline" size={20} color="#555" />
-              <Text style={styles.sidebarItemText}>Prayer & Devotion Tracker</Text>
-            </TouchableOpacity>
-          </Animated.View>
-        </Pressable>
-      </Modal>
-    </View>
-  );
+    // Reset modal
+    setPastorName('');
+    setSelectedBookingId(null);
+  } catch (error) {
+    console.error('Error updating schedule:', error);
+    Alert.alert('Error ❌', 'Failed to approve schedule.');
+  }
 };
 
-const styles = StyleSheet.create({
-  container: { flex: 1, paddingTop: 40, paddingHorizontal: 20 },
-  header: { fontSize: 24, fontWeight: 'bold', marginVertical: 20, textAlign: 'center' },
-  card: {
-    backgroundColor: '#f0f4ff',
-    padding: 15,
-    borderRadius: 10,
-    marginBottom: 15,
-    borderColor: '#ccc',
-    borderWidth: 1,
-  },
-  title: { fontSize: 16, fontWeight: 'bold' },
-  actionButtons: { flexDirection: 'row', marginTop: 10 },
-  button: {
-    flex: 1,
-    paddingVertical: 10,
-    borderRadius: 5,
-    marginHorizontal: 5,
-    alignItems: 'center',
-  },
-  approveButton: { backgroundColor: 'green' },
-  rejectButton: { backgroundColor: 'red' },
-  buttonText: { color: 'white', fontWeight: 'bold' },
+const handleReject = async (schedule_id) => {
+  try {
+    const timestampNow = new Date();
 
-  // Sidebar styles
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.3)', flexDirection: 'row' },
-  sidebar: {
-    width: 250,
-    backgroundColor: '#fff',
-    padding: 20,
-    height: '100%',
-    shadowColor: '#000',
-    shadowOpacity: 0.2,
-    shadowOffset: { width: 2, height: 0 },
-    elevation: 5,
-  },
-  profileSection: { marginBottom: 30 },
-  profileName: { fontSize: 18, fontWeight: 'bold' },
-  profileStatus: { color: 'green' },
-  sidebarButton: { flexDirection: 'row', alignItems: 'center', marginBottom: 20 },
-  sidebarItemText: { marginLeft: 10, fontSize: 16 },
-});
+    await updateDoc(doc(db, 'schedules', schedule_id), {
+      status: 'rejected',
+      updated_at: timestampNow, // optional timestamp
+    });
 
-export default BookingListScreen;
+    // Update UI
+    setBookings((prev) => prev.filter((item) => item.schedule_id !== schedule_id));
+
+    Alert.alert('Rejected ❌', 'Schedule has been rejected.');
+  } catch (error) {
+    console.error('Error rejecting schedule:', error);
+    Alert.alert('Error ❌', 'Failed to reject schedule.');
+  }
+};
+
+    const renderItem = ({ item }) => (
+      <View style={styles.card}>
+        <Text style={styles.title}>Church: {item.church_name}</Text>
+        <Text>Member Name: {item.member_name}</Text>
+        <Text>Email: {item.member_email}</Text>
+        <Text>Contact: {item.member_contact}</Text>
+        <Text>Address: {item.member_address}</Text>
+        <Text>Purok: {item.member_purok}</Text>
+        <Text>Number of Members: {item.number_of_members}</Text>
+        <Text>Title: {item.title}</Text>
+        <Text>Location: {item.location}</Text>
+        <Text>Start Time: {formatDate(item.start_time)}</Text>
+        <Text>End Time: {formatDate(item.end_time)}</Text>
+        <Text>Status: {item.status}</Text>
+        <Text>Submitted: {formatDate(item.created_at)}</Text>
+
+        <View style={styles.actionButtons}>
+          <TouchableOpacity
+            style={[styles.button, styles.approveButton]}
+            onPress={() => openAssignModal(item.id)}
+          >
+            <Text style={styles.buttonText}>Approve</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.button, styles.rejectButton]}
+            onPress={() => handleReject(item.schedule_id)}
+          >
+            <Text style={styles.buttonText}>Reject</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+
+    return (
+      <View style={styles.container}>
+        <SidebarToggle onOpen={() => setSidebarVisible(true)} />
+        <SidebarModal visible={sidebarVisible} onClose={() => setSidebarVisible(false)} />
+
+        <Text style={styles.header}>Pending Booking Requests</Text>
+
+        {loading ? (
+          <ActivityIndicator size="large" color="#007bff" />
+        ) : (
+          <FlatList
+            data={bookings}
+            keyExtractor={(item) => item.id}
+            renderItem={renderItem}
+            ListEmptyComponent={
+              <Text style={styles.empty}>No valid pending bookings found.</Text>
+            }
+          />
+        )}
+
+        {/* Assign Pastor Modal */}
+        <Modal
+          visible={assignModalVisible}
+          transparent
+          animationType="slide"
+          onRequestClose={() => setAssignModalVisible(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContainer}>
+              <Text style={styles.modalTitle}>Assign Pastor</Text>
+              <TextInput
+                placeholder="Enter Pastor Name"
+                style={styles.input}
+                value={pastorName}
+                onChangeText={setPastorName}
+              />
+              <View style={styles.modalButtons}>
+                <TouchableOpacity
+                  style={[styles.button, styles.approveButton]}
+                  onPress={handleAssignPastor}
+                >
+                  <Text style={styles.buttonText}>Confirm</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.button, styles.rejectButton]}
+                  onPress={() => setAssignModalVisible(false)}
+                >
+                  <Text style={styles.buttonText}>Cancel</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
+      </View>
+    );
+  };
+
+  const styles = StyleSheet.create({
+    container: { flex: 1, paddingTop: 50, paddingHorizontal: 15 },
+    header: {
+      fontSize: 22,
+      fontWeight: 'bold',
+      textAlign: 'center',
+      marginBottom: 15,
+    },
+    card: {
+      backgroundColor: '#e9f0ff',
+      padding: 15,
+      marginBottom: 15,
+      borderRadius: 8,
+      borderColor: '#ccc',
+      borderWidth: 1,
+    },
+    title: { fontSize: 16, fontWeight: 'bold', marginBottom: 5 },
+    actionButtons: { flexDirection: 'row', marginTop: 10 },
+    button: {
+      flex: 1,
+      paddingVertical: 8,
+      marginHorizontal: 5,
+      borderRadius: 6,
+      alignItems: 'center',
+    },
+    approveButton: { backgroundColor: '#28a745' },
+    rejectButton: { backgroundColor: '#dc3545' },
+    buttonText: { color: '#fff', fontWeight: 'bold' },
+    empty: { textAlign: 'center', color: '#666', marginTop: 50 },
+
+    // Modal styles
+    modalOverlay: {
+      flex: 1,
+      backgroundColor: 'rgba(0,0,0,0.4)',
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    modalContainer: {
+      backgroundColor: '#fff',
+      width: '85%',
+      padding: 20,
+      borderRadius: 10,
+    },
+    modalTitle: {
+      fontSize: 18,
+      fontWeight: 'bold',
+      marginBottom: 15,
+      textAlign: 'center',
+    },
+    input: {
+      borderWidth: 1,
+      borderColor: '#ccc',
+      padding: 10,
+      marginBottom: 15,
+      borderRadius: 6,
+    },
+    modalButtons: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+    },
+  });
+
+  export default BookingRequestScreen;

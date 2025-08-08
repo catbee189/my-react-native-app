@@ -55,7 +55,7 @@ export default function AddPrayerTracker({ navigation }) {
   useEffect(() => {
     async function fetchPastors() {
       try {
-        const q = query(collection(db, "users"), where("role", "==", "member"));
+        const q = query(collection(db, "users"));
         const querySnapshot = await getDocs(q);
         const pastorsList = [];
         querySnapshot.forEach((doc) => {
@@ -68,6 +68,26 @@ export default function AddPrayerTracker({ navigation }) {
     }
     fetchPastors();
   }, []);
+
+
+  
+  useEffect(() => {
+    async function fetchPastors() {
+      try {
+        const q = query(collection(db, "members"));
+        const querySnapshot = await getDocs(q);
+        const pastorsList = [];
+        querySnapshot.forEach((doc) => {
+          pastorsList.push({ id: doc.id, ...doc.data() });
+        });
+        setPastors(pastorsList);
+      } catch (error) {
+        console.error("Error fetching pastors:", error);
+      }
+    }
+    fetchPastors();
+  }, []);
+
 
   const onChangeDate = (event, selectedDate) => {
     setShowDatePicker(Platform.OS === "ios");
@@ -87,6 +107,7 @@ export default function AddPrayerTracker({ navigation }) {
     try {
       await addDoc(collection(db, "prayer_devotion_tracker"), {
         user_id: selectedPastor,
+        
         date: date.toISOString().split("T")[0],
         devotion_text: devotionText.trim(),
         prayer_text: prayerText.trim(),

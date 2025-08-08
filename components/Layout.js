@@ -5,10 +5,11 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 // Screens
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import LoginForm from './LoginForm';
+import webpage from "./webpage";
 
 import DashboardScreen  from './DashboardScreen';
 import ManagerUserScreen from './ManagerUserScreen'; // Adjust path
+
 import AddUser from './AddUser';
 import ManagerSchedule from './ManagerSchedule';
 import BookingScreen from './BookingScreen';
@@ -44,6 +45,9 @@ const DrawerNavigator = () => {
         <Drawer.Screen name="Devotion Tracker" component={DevotionTracker} />
         <Drawer.Screen name="Add Tracker" component={AddPrayerTracker} />
         <Drawer.Screen name="Logs" component={LogPrayersDevotions} />
+        <Drawer.Screen name="webpage" component={webpage} />
+
+
       </Drawer.Navigator>
     </GestureHandlerRootView>
   );

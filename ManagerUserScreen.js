@@ -1,190 +1,209 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
-  FlatList,
-  StyleSheet,
-  ActivityIndicator,
   TouchableOpacity,
+  StyleSheet,
   Alert,
-  Modal,
-  TextInput,
   Platform,
   ScrollView,
-  Animated,
+  Modal,
+  TextInput,
+  ActivityIndicator,
 } from 'react-native';
-import { collection, getDocs, deleteDoc, doc, updateDoc } from 'firebase/firestore';
+import { collection, getDocs, doc, deleteDoc, updateDoc } from 'firebase/firestore';
 import { db } from './firebase';
-import { Ionicons } from '@expo/vector-icons';
-import SidebarModal from './SidebarModal'; // Sidebar with navigation links
-import SidebarToggle from './SidebarToggle'; // Menu icon to open sidebar
+import SidebarModal from './SidebarModal';
+import SidebarToggle from './SidebarToggle';
 
-export default function UserListScreen() {
-  const [users, setUsers] = useState([]);
-  const [loading, setLoading] = useState(true);
-
-  // Modal state and selected user for editing
-  const [editModalVisible, setEditModalVisible] = useState(false);
-  const [selectedUser, setSelectedUser] = useState(null);
-
-  // Form fields state for editing
-  const [name, setName] = useState('');
-  const [email, setEmail] = useState('');
-  const [phone, setPhone] = useState('');
-  const [address, setAddress] = useState('');
-  const [role, setRole] = useState('');
-
-  // Sidebar animation and visibility state
-  const slideAnim = useRef(new Animated.Value(-250)).current;
+export default function ScheduleList({ navigation }) {
+  const [schedules, setSchedules] = useState([]);
+  const [loading, setLoading] = useState(false);
   const [sidebarVisible, setSidebarVisible] = useState(false);
 
-  // Fetch users from Firestore
-  const fetchUsers = async () => {
+  // Modal state for editing
+  const [editModalVisible, setEditModalVisible] = useState(false);
+  const [editSchedule, setEditSchedule] = useState(null);
+  const [updateLoading, setUpdateLoading] = useState(false);
+
+  const fetchSchedules = async () => {
+    setLoading(true);
     try {
-      setLoading(true);
-      const querySnapshot = await getDocs(collection(db, 'users'));
-      const userList = [];
-      querySnapshot.forEach((doc) => {
-        userList.push({ id: doc.id, ...doc.data() });
+const querySnapshot = await getDocs(collection(db, 'members'));
+    const schedulesArray = [];
+      querySnapshot.forEach((docSnap) => {
+        schedulesArray.push({ id: docSnap.id, ...docSnap.data() });
       });
-      setUsers(userList);
+      setSchedules(schedulesArray);
     } catch (error) {
-      console.error('Error fetching users:', error);
-      Alert.alert('Error', 'Failed to fetch users');
-    } finally {
-      setLoading(false);
+      console.error('Error fetching schedules:', error);
+      Alert.alert('Error', 'Failed to load schedules');
     }
+    setLoading(false);
   };
 
   useEffect(() => {
-    fetchUsers();
+    fetchSchedules();
   }, []);
 
-  // Delete user function
-  const deleteUser = async (id) => {
+  const confirmDelete = (id) => {
     if (Platform.OS === 'web') {
-      const confirm = window.confirm('Are you sure you want to delete this user?');
-      if (!confirm) return;
-      await performDelete(id);
+      const confirmed = window.confirm('Are you sure you want to delete this schedule?');
+      if (confirmed) deleteSchedule(id);
     } else {
-      Alert.alert('Confirm Delete', 'Are you sure you want to delete this user?', [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: () => performDelete(id),
-        },
-      ]);
+      Alert.alert(
+        'Delete Schedule',
+        'Are you sure you want to delete this schedule?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Delete',
+            style: 'destructive',
+            onPress: () => deleteSchedule(id),
+          },
+        ]
+      );
     }
   };
 
-  const performDelete = async (id) => {
+  const deleteSchedule = async (id) => {
     try {
-      setLoading(true);
-      await deleteDoc(doc(db, 'users', id));
-      Alert.alert('Success', 'User deleted successfully');
-      fetchUsers();
+      await deleteDoc(doc(db, 'schedules', id));
+      Alert.alert('Deleted', 'Schedule deleted successfully');
+      fetchSchedules();
     } catch (error) {
-      console.error('Error deleting user:', error);
-      Alert.alert('Error', 'Failed to delete user');
-    } finally {
-      setLoading(false);
+      console.error('Delete error:', error);
+      Alert.alert('Error', 'Failed to delete schedule');
     }
   };
 
-  // Open edit modal and preload data
-  const openEditModal = (user) => {
-    setSelectedUser(user);
-    setName(user.name || '');
-    setEmail(user.email || '');
-    setPhone(user.phone || '');
-    setAddress(user.address || '');
-    setRole(user.role || '');
+  const formatDate = (date) => {
+    if (!date) return '-';
+    try {
+      const d = typeof date.toDate === 'function' ? date.toDate() : new Date(date);
+      return d.toLocaleString();
+    } catch (err) {
+      return '-';
+    }
+  };
+
+  // Open modal and prefill data for editing
+  const openEditModal = (schedule) => {
+    setEditSchedule({
+      id: schedule.id,
+      title: schedule.title || '',
+      location: schedule.location || '',
+      start_time:
+        schedule.start_time && typeof schedule.start_time.toDate === 'function'
+          ? schedule.start_time.toDate().toISOString().slice(0, 16)
+          : '',
+      end_time:
+        schedule.end_time && typeof schedule.end_time.toDate === 'function'
+          ? schedule.end_time.toDate().toISOString().slice(0, 16)
+          : '',
+    });
     setEditModalVisible(true);
   };
 
-  // Update user in Firestore
-  const updateUser = async () => {
-    if (!name.trim()) {
-      Alert.alert('Validation', 'Name cannot be empty');
-      return;
-    }
-    try {
-      setLoading(true);
-      const userRef = doc(db, 'users', selectedUser.id);
-      await updateDoc(userRef, {
-        name,
-        email,
-        phone,
-        address,
-        role,
-      });
-      Alert.alert('Success', 'User updated successfully');
-      setEditModalVisible(false);
-      fetchUsers();
-    } catch (error) {
-      console.error('Error updating user:', error);
-      Alert.alert('Error', 'Failed to update user');
-    } finally {
-      setLoading(false);
-    }
+  // Handle form input changes inside modal
+  const handleChange = (field, value) => {
+    setEditSchedule((prev) => ({ ...prev, [field]: value }));
   };
 
-  // Render each user card
-  const renderItem = ({ item }) => {
-    const hasData = item.name || item.email || item.phone || item.address || item.role;
+  // Update schedule in Firestore
+  const updateSchedule = async () => {
+    if (!editSchedule.title.trim()) {
+      Alert.alert('Validation', 'Title is required');
+      return;
+    }
 
-    return (
-      
-      <View style={styles.card}>
-       <SidebarToggle onOpen={() => setSidebarVisible(true)} />
-        <SidebarModal visible={sidebarVisible} onClose={() => setSidebarVisible(false)} />
+    setUpdateLoading(true);
 
-        {/* Sidebar toggle placed here if you want the menu button on each card */}
-        {/* Or move it outside FlatList for global header */}
-        
-        <View style={styles.cardHeader}>
-          <Text style={styles.name}>{item.name || ''}</Text>
-
-          {hasData && (
-            <View style={styles.actions}>
-              <TouchableOpacity onPress={() => openEditModal(item)}>
-                <Ionicons name="create-outline" size={20} color="#007bff" />
-              </TouchableOpacity>
-
-              <TouchableOpacity onPress={() => deleteUser(item.id)} style={{ marginLeft: 15 }}>
-                <Ionicons name="trash-outline" size={20} color="#d9534f" />
-              </TouchableOpacity>
-            </View>
-          )}
-        </View>
-
-        {item.role ? <Text style={styles.role}>Role: {item.role}</Text> : null}
-        {item.email ? <Text>Email: {item.email}</Text> : null}
-        {item.phone ? <Text>Phone: {item.phone}</Text> : null}
-        {item.address ? <Text>Address: {item.address}</Text> : null}
-      </View>
-    );
+    try {
+      const scheduleRef = doc(db, 'schedules', editSchedule.id);
+      await updateDoc(scheduleRef, {
+        title: editSchedule.title,
+        location: editSchedule.location,
+        start_time: editSchedule.start_time ? new Date(editSchedule.start_time) : null,
+        end_time: editSchedule.end_time ? new Date(editSchedule.end_time) : null,
+      });
+      Alert.alert('Success', 'Schedule updated successfully');
+      setEditModalVisible(false);
+      fetchSchedules();
+    } catch (error) {
+      console.error('Update error:', error);
+      Alert.alert('Error', 'Failed to update schedule');
+    }
+    setUpdateLoading(false);
   };
 
   return (
-    <View style={styles.container}>
-      {/* Global sidebar toggle button */}
-      
-      <Text style={styles.title}>User List</Text>
+    <View style={{ flex: 1, backgroundColor: '#fff' }}>
+      {/* Sidebar */}
+      <SidebarToggle onOpen={() => setSidebarVisible(true)} />
+      <SidebarModal visible={sidebarVisible} onClose={() => setSidebarVisible(false)} />
+
+      <ScrollView contentContainerStyle={styles.container}>
+        {/* Add New Schedule */}
+     
+
+        {/* Schedule List */}
+       <View style={styles.headerContainer}>
+  <Text style={styles.headerText}>View Members</Text>
+</View>
 
       {loading ? (
-        <ActivityIndicator size="large" color="#007bff" />
-      ) : (
-        <FlatList
-          data={users}
-          renderItem={renderItem}
-          keyExtractor={(item) => item.id}
-          contentContainerStyle={{ paddingBottom: 20 }}
-        />
-      )}
+  <ActivityIndicator size="large" color="#007bff" />
+) : schedules.length === 0 ? (
+  <Text>No schedules found.</Text>
+) : (
+  schedules.map((schedule) => {
+    const hasData =
+      schedule.firstName ||
+      schedule.lastName ||
+      schedule.email ||
+      schedule.address ||
+      schedule.createdAt;
 
-      {/* Edit User Modal */}
+    if (!hasData) return null; // Skip rendering the card entirely
+
+    return (
+      <View key={schedule.id} style={styles.card}>
+        {/* Fullname: Check if firstName or lastName exists */}
+        {(schedule.firstName || schedule.lastName) && (
+          <Text style={styles.text}>
+            <Text style={styles.label}>Fullname:</Text> {schedule.firstName || ''} {schedule.lastName || ''}
+          </Text>
+        )}
+
+        {/* Email */}
+        {schedule.email && (
+          <Text style={styles.text}>
+            <Text style={styles.label}>Email:</Text> {schedule.email}
+          </Text>
+        )}
+
+        {/* Address */}
+        {schedule.address && (
+          <Text style={styles.text}>
+            <Text style={styles.label}>Address:</Text> {schedule.address}
+          </Text>
+        )}
+
+        {/* Created At */}
+        {schedule.createdAt && (
+          <Text style={styles.text}>
+            <Text style={styles.label}>Created At:</Text> {formatDate(schedule.createdAt)}
+          </Text>
+        )}
+      </View>
+    );
+  })
+)}
+
+      </ScrollView>
+
+      {/* Edit Modal */}
       <Modal
         visible={editModalVisible}
         animationType="slide"
@@ -193,40 +212,61 @@ export default function UserListScreen() {
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            <ScrollView>
-              <Text style={styles.modalTitle}>Edit User</Text>
+            <Text style={styles.modalTitle}>Edit Schedule</Text>
 
-              <TextInput style={styles.input} placeholder="Name" value={name} onChangeText={setName} />
-              <TextInput
-                style={styles.input}
-                placeholder="Email"
-                keyboardType="email-address"
-                value={email}
-                onChangeText={setEmail}
-              />
-              <TextInput
-                style={styles.input}
-                placeholder="Phone"
-                keyboardType="phone-pad"
-                value={phone}
-                onChangeText={setPhone}
-              />
-              <TextInput style={styles.input} placeholder="Address" value={address} onChangeText={setAddress} />
-              <TextInput style={styles.input} placeholder="Role" value={role} onChangeText={setRole} />
+            <Text style={styles.inputLabel}>Title</Text>
+            <TextInput
+              style={styles.input}
+              value={editSchedule?.title}
+              onChangeText={(text) => handleChange('title', text)}
+              placeholder="Schedule Title"
+            />
 
-              <View style={styles.modalButtons}>
-                <TouchableOpacity
-                  style={[styles.modalButton, styles.cancelButton]}
-                  onPress={() => setEditModalVisible(false)}
-                >
-                  <Text style={styles.buttonText}>Cancel</Text>
-                </TouchableOpacity>
+            <Text style={styles.inputLabel}>Location</Text>
+            <TextInput
+              style={styles.input}
+              value={editSchedule?.location}
+              onChangeText={(text) => handleChange('location', text)}
+              placeholder="Location"
+            />
 
-                <TouchableOpacity style={[styles.modalButton, styles.saveButton]} onPress={updateUser}>
+            <Text style={styles.inputLabel}>Start Time</Text>
+            <TextInput
+              style={styles.input}
+              value={editSchedule?.start_time}
+              onChangeText={(text) => handleChange('start_time', text)}
+              placeholder="YYYY-MM-DDTHH:mm"
+            />
+
+            <Text style={styles.inputLabel}>End Time</Text>
+            <TextInput
+              style={styles.input}
+              value={editSchedule?.end_time}
+              onChangeText={(text) => handleChange('end_time', text)}
+              placeholder="YYYY-MM-DDTHH:mm"
+            />
+
+            <View style={styles.modalButtons}>
+              <TouchableOpacity
+                style={[styles.button, { flex: 1, marginRight: 10 }]}
+                onPress={() => setEditModalVisible(false)}
+                disabled={updateLoading}
+              >
+                <Text style={styles.buttonText}>Cancel</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.button, { flex: 1, backgroundColor: '#28a745' }]}
+                onPress={updateSchedule}
+                disabled={updateLoading}
+              >
+                {updateLoading ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
                   <Text style={styles.buttonText}>Save</Text>
-                </TouchableOpacity>
-              </View>
-            </ScrollView>
+                )}
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </Modal>
@@ -234,18 +274,22 @@ export default function UserListScreen() {
   );
 }
 
-// Styles
 const styles = StyleSheet.create({
   container: {
-    paddingTop: 80,
-    paddingHorizontal: 20,
-    flex: 1,
+    padding: 20,
     backgroundColor: '#fff',
+    paddingBottom: 40,
   },
-  title: {
-    fontSize: 24,
+  button: {
+    backgroundColor: '#007bff',
+    padding: 14,
+    borderRadius: 6,
+    alignItems: 'center',
+  },
+  buttonText: {
+    color: '#fff',
     fontWeight: 'bold',
-    marginBottom: 20,
+    fontSize: 16,
   },
   card: {
     borderWidth: 1,
@@ -253,24 +297,43 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     padding: 15,
     marginBottom: 15,
-    backgroundColor: '#f9f9f9',
+    backgroundColor: '#fafafa',
   },
-  cardHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+  title: {
+    fontWeight: 'bold',
+    fontSize: 18,
     marginBottom: 6,
   },
-  name: {
-    fontSize: 18,
+  text: {
+    fontSize: 14,
+    marginBottom: 4,
+  },
+  label: {
+    fontWeight: '600',
+  },
+  actionRow: {
+    flexDirection: 'row',
+    marginTop: 10,
+    justifyContent: 'flex-end',
+  },
+  actionButton: {
+    paddingVertical: 6,
+    paddingHorizontal: 14,
+    borderRadius: 5,
+    marginLeft: 10,
+  },
+  editButton: {
+    backgroundColor: '#28a745',
+  },
+  deleteButton: {
+    backgroundColor: '#dc3545',
+  },
+  actionText: {
+    color: '#fff',
     fontWeight: 'bold',
   },
-  role: {
-    color: 'gray',
-    marginBottom: 5,
-  },
-  actions: {
-    flexDirection: 'row',
-  },
+
+  // Modal styles
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.5)',
@@ -278,44 +341,45 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
   },
   modalContent: {
-    backgroundColor: 'white',
-    borderRadius: 8,
+    backgroundColor: '#fff',
+    borderRadius: 10,
     padding: 20,
-    maxHeight: '80%',
+    elevation: 5,
   },
   modalTitle: {
-    fontSize: 22,
+    fontSize: 20,
     fontWeight: 'bold',
     marginBottom: 15,
     textAlign: 'center',
+  },
+  inputLabel: {
+    fontWeight: '600',
+    marginTop: 10,
   },
   input: {
     borderWidth: 1,
     borderColor: '#ccc',
     borderRadius: 6,
-    paddingHorizontal: 10,
-    paddingVertical: Platform.OS === 'ios' ? 12 : 8,
-    marginBottom: 15,
+    padding: 10,
+    marginTop: 5,
   },
   modalButtons: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    marginTop: 20,
   },
-  modalButton: {
-    flex: 1,
-    paddingVertical: 12,
-    borderRadius: 6,
-    marginHorizontal: 5,
-    alignItems: 'center',
-  },
-  cancelButton: {
-    backgroundColor: '#ccc',
-  },
-  saveButton: {
-    backgroundColor: '#007bff',
-  },
-  buttonText: {
-    color: '#fff',
-    fontWeight: 'bold',
-  },
+  headerContainer: {
+  padding: 20,
+  backgroundColor: '#f8f9fa',
+  alignItems: 'center',
+  borderBottomWidth: 1,
+  borderBottomColor: '#ddd',
+  marginBottom: 10,
+},
+
+headerText: {
+  fontSize: 24,
+  fontWeight: 'bold',
+  color: '#333',
+},
+
 });
